@@ -26,6 +26,64 @@ npm start
 
 Abre en el navegador: **http://localhost:3000**
 
+## App instalable (Ubuntu y similares)
+
+Puedes usar EasyCronTab como aplicación de escritorio: una ventana propia, instalable en Linux.
+
+### Ejecutar como app de escritorio (desarrollo)
+
+```bash
+npm install
+npm run app
+```
+
+Se abrirá una ventana de Electron con la interfaz (sin abrir el navegador).
+
+### Generar instalador (.deb o AppImage)
+
+```bash
+npm install
+npm run build
+```
+
+Los instaladores se generan en la carpeta `dist/`:
+
+- **deb** (Ubuntu, Debian, etc.): `dist/easycrontab_1.0.0_amd64.deb`
+- **AppImage** (portable): `dist/EasyCronTab-1.0.0.AppImage`
+
+Solo .deb:
+
+```bash
+npm run build:deb
+```
+
+Solo AppImage (no requiere instalación):
+
+```bash
+npm run build:appimage
+```
+
+### Instalar en Ubuntu
+
+**Con el .deb:**
+
+```bash
+sudo dpkg -i dist/easycrontab_1.0.0_amd64.deb
+```
+
+Luego abre **EasyCronTab** desde el menú de aplicaciones (búscalo como "EasyCronTab").
+
+**Con el AppImage:**
+
+```bash
+chmod +x dist/EasyCronTab-1.0.0.AppImage
+./dist/EasyCronTab-1.0.0.AppImage
+```
+
+Puedes copiar el AppImage a `~/.local/bin` o donde quieras y ejecutarlo sin instalar nada.
+
+La configuración (carpeta de repositorios, etc.) se guarda en `~/.config/easycrontab` cuando usas la app instalada.
+
 ### Variables de entorno
 
 | Variable | Descripción | Por defecto |

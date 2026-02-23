@@ -3,9 +3,13 @@
   "version": "1.0.0",
   "description": "Gestor de crontab para Linux: interfaz web sencilla y buscador en lenguaje natural",
   "license": "MIT",
-  "main": "app.js",
+  "main": "electron-main.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "app": "electron .",
+    "build": "electron-builder --linux",
+    "build:deb": "electron-builder --linux deb",
+    "build:appimage": "electron-builder --linux AppImage"
   },
   "dependencies": {
     "cron-parser": "^5.5.0",
@@ -13,5 +17,33 @@
     "ejs": "^3.1.9",
     "express": "^4.18.2",
     "fuse.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.easycrontab.app",
+    "productName": "EasyCronTab",
+    "icon": "build/icon.png",
+    "linux": {
+      "target": ["deb", "AppImage"],
+      "category": "Utility",
+      "maintainer": "EasyCronTab",
+      "icon": "build/icon.png"
+    },
+    "files": [
+      "app.js",
+      "config.js",
+      "electron-main.js",
+      "build/**/*",
+      "lib/**/*",
+      "views/**/*",
+      "public/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      { "from": "build/icon.png", "to": "icon.png" }
+    ]
   }
 }
