@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %> – Gestor de crontab</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="header">
+    <h1>🕒 EasyCronTab</h1>
+    <nav>
+      <a href="/">Inicio</a>
+      <a href="#schedule">Schedule</a>
+      <a href="#tareas">Gestionar</a>
+    </nav>
+  </header>
+
+  <main class="main-content">
+    <p class="intro">Crea y edita tareas programadas sin tocar comandos de Linux: elige frecuencia (cada X minutos, diario, semanal…), la hora y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
+
+    <!-- Buscador: resultados clickeables (Editar/Eliminar); al buscar solo se muestran esos resultados -->
+    <section class="search-section">
+      <h2>Buscar tareas</h2>
+      <div class="search-box">
+        <input type="text" id="search-input" placeholder="Ej: cron de arañas, próximas horas, backup..." autocomplete="off">
+      </div>
+      <div class="search-results" id="search-results" aria-live="polite">
+        <div class="search-hint" id="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>
+      </div>
+      <p class="search-ver-todas" id="search-ver-todas" style="display: none; margin-top: 0.5rem;">
+        <button type="button" class="btn btn-small btn-edit" id="btn-ver-todas">Ver todas las tareas</button>
+      </p>
+    </section>
+
+    <!-- Schedule: todas las tareas ordenadas por próxima ejecución -->
+    <section class="schedule-section" id="schedule">
+      <h2>Tareas por próxima ejecución</h2>
+      <p class="intro">Todas las tareas ordenadas por la próxima vez que se ejecutarán. Puedes editar o eliminar desde aquí o desde la búsqueda.</p>
+      <ul class="jobs-list" id="schedule-list"></ul>
+      <p class="no-jobs" id="no-jobs">No hay tareas. Añade una con el botón de abajo.</p>
+    </section>
+
+    <!-- Tareas: acciones y formulario -->
+    <section class="tasks-section" id="tareas">
+      <h2>Gestionar tareas</h2>
+      <% if (typeof crontabError !== 'undefined' && crontabError) { %>
+        <p class="error-message">Error al leer crontab: <%= crontabError %></p>
+      <% } %>
+
+      <div class="form-actions" style="margin-bottom: 1rem;">
+        <button type="button" class="btn btn-primary" id="btn-add-job">Añadir tarea</button>
+        <button type="button" class="btn btn-primary" id="btn-save-crontab">Guardar crontab</button>
+        <span id="save-status" class="status"></span>
+      </div>
+
+      <!-- Formulario Añadir/Editar (se muestra al hacer clic en Añadir o Editar) -->
+      <div class="job-form-panel" id="job-form-panel" style="display: none;">
+        <h3 id="job-form-title">Nueva tarea</h3>
+        <form id="job-form">
+          <input type="hidden" id="job-edit-index" value="-1">
+          <div class="form-row">
+            <label for="job-frequency">Frecuencia</label>
+            <select id="job-frequency" name="frequency">
+              <% FRECUENCIAS.forEach(function(f) { %>
+                <option value="<%= f.value %>"><%= f.label %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-row" id="row-minute-interval" style="display: none;">
+            <label for="job-minute-interval">Cada cuántos minutos</label>
+            <input type="number" id="job-minute-interval" name="minuteInterval" min="1" max="59" value="5">
+          </div>
+          <div class="form-row form-row-inline" id="row-daily-time" style="display: none;">
+            <div class="form-row">
+              <label for="job-hour">Hora (0-23)</label>
+              <input type="number" id="job-hour" name="hour" min="0" max="23" value="0">
+            </div>
+            <div class="form-row">
+              <label for="job-minute">Minuto (0-59)</label>
+              <input type="number" id="job-minute" name="minute" min="0" max="59" value="0">
+            </div>
+          </div>
+          <div class="form-row" id="row-day-of-week" style="display: none;">
+            <label for="job-day-of-week">Día de la semana</label>
+            <select id="job-day-of-week" name="dayOfWeek">
+              <% DIAS_SEMANA.forEach(function(d) { %>
+                <option value="<%= d.value %>"><%= d.label %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div class="form-row" id="row-day-of-month" style="display: none;">
+            <label for="job-day-of-month">Día del mes (1-31)</label>
+            <input type="number" id="job-day-of-month" name="dayOfMonth" min="1" max="31" value="1">
+          </div>
+          <div class="form-row" id="row-custom-expression" style="display: none;">
+            <label for="job-custom-expression">Expresión cron (5 campos: min hora día-mes mes día-semana)</label>
+            <input type="text" id="job-custom-expression" name="customExpression" placeholder="0 2 * * *">
+          </div>
+          <div class="form-row">
+            <label for="job-command">Comando a ejecutar *</label>
+            <textarea id="job-command" name="command" placeholder="/ruta/al/script.sh o: cd /ruta && ./script.sh" required></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Guardar tarea</button>
+            <button type="button" class="btn btn-small btn-edit" id="btn-cancel-form">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      var jobs = <%- JSON.stringify(typeof jobs !== 'undefined' ? jobs : []) %>;
+      var FREQUENCIAS = <%- JSON.stringify(typeof FRECUENCIAS !== 'undefined' ? FRECUENCIAS : []) %>;
+
+      function buildCronExpression(opts) {
+        var f = opts.frequency;
+        if (f === 'at_reboot') return '@reboot';
+        if (f === 'custom' && opts.customExpression) {
+          var parts = String(opts.customExpression).trim().split(/\s+/);
+          if (parts.length >= 5) return parts.slice(0, 5).join(' ');
+          return '';
+        }
+        if (f === 'every_n_minutes') {
+          var n = Math.max(1, Math.min(59, parseInt(opts.minuteInterval, 10) || 5));
+          return '*/' + n + ' * * * *';
+        }
+        if (f === 'every_hour') return '0 * * * *';
+        var hour = Math.max(0, Math.min(23, parseInt(opts.hour, 10) || 0));
+        var minute = Math.max(0, Math.min(59, parseInt(opts.minute, 10) || 0));
+        var m = String(minute);
+        var h = String(hour);
+        if (f === 'daily') return m + ' ' + h + ' * * *';
+        if (f === 'weekly') {
+          var dow = opts.dayOfWeek !== undefined && opts.dayOfWeek !== '' ? String(opts.dayOfWeek) : '0';
+          return m + ' ' + h + ' * * ' + dow;
+        }
+        if (f === 'monthly') {
+          var dom = Math.max(1, Math.min(31, parseInt(opts.dayOfMonth, 10) || 1));
+          return m + ' ' + h + ' ' + dom + ' * *';
+        }
+        return '';
+      }
+
+      function escapeHtml(s) {
+        if (!s) return '';
+        var div = document.createElement('div');
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      function findJobIndex(schedule, command) {
+        for (var i = 0; i < jobs.length; i++) {
+          if (jobs[i].schedule === schedule && jobs[i].command === command) return i;
+        }
+        return -1;
+      }
+
+      function makeJobCard(job, index) {
+        var nextRunStr = '';
+        if (job.nextRun) {
+          try {
+            var d = new Date(job.nextRun);
+            nextRunStr = 'Próxima: ' + d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+          } catch (e) { nextRunStr = ''; }
+        }
+        var html = '<div class="job-info">';
+        if (nextRunStr) html += '<div class="job-next-run">' + escapeHtml(nextRunStr) + '</div>';
+        html += '<div class="job-schedule-human">' + escapeHtml(job.humanSchedule || job.schedule) + '</div>';
+        if (job.humanCommand) {
+          html += '<div class="job-human-command">' + escapeHtml(job.humanCommand) + '</div>';
+        }
+        html += '<div class="job-command">' + escapeHtml(job.command) + '</div></div>' +
+          '<div class="job-actions">' +
+          '<button type="button" class="btn-small btn-edit" data-index="' + index + '" data-action="edit">Editar</button>' +
+          '<button type="button" class="btn-small btn-delete" data-index="' + index + '" data-action="delete">Eliminar</button>' +
+          '</div>';
+        return html;
+      }
+
+      function renderScheduleList() {
+        var list = document.getElementById('schedule-list');
+        var noJobs = document.getElementById('no-jobs');
+        list.innerHTML = '';
+        if (jobs.length === 0) {
+          noJobs.style.display = 'block';
+          return;
+        }
+        noJobs.style.display = 'none';
+        var sorted = jobs.slice().sort(function (a, b) {
+          var ma = a.nextRunMs != null ? a.nextRunMs : 99999999999999;
+          var mb = b.nextRunMs != null ? b.nextRunMs : 99999999999999;
+          return ma - mb;
+        });
+        sorted.forEach(function (job) {
+          var idx = findJobIndex(job.schedule, job.command);
+          if (idx < 0) return;
+          var li = document.createElement('li');
+          li.className = 'job-card';
+          li.innerHTML = makeJobCard(job, idx);
+          list.appendChild(li);
+        });
+        list.querySelectorAll('[data-action="edit"]').forEach(function (btn) {
+          btn.addEventListener('click', function () { openForm(parseInt(btn.getAttribute('data-index'), 10)); });
+        });
+        list.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var i = parseInt(btn.getAttribute('data-index'), 10);
+            jobs.splice(i, 1);
+            renderScheduleList();
+            if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
+          });
+        });
+      }
+
+      function showFrequencyRows() {
+        var freq = document.getElementById('job-frequency').value;
+        var isReboot = (freq === 'at_reboot');
+        document.getElementById('row-minute-interval').style.display = (freq === 'every_n_minutes' && !isReboot) ? 'block' : 'none';
+        document.getElementById('row-daily-time').style.display = ((freq === 'daily' || freq === 'weekly' || freq === 'monthly') && !isReboot) ? 'flex' : 'none';
+        document.getElementById('row-day-of-week').style.display = freq === 'weekly' ? 'block' : 'none';
+        document.getElementById('row-day-of-month').style.display = freq === 'monthly' ? 'block' : 'none';
+        document.getElementById('row-custom-expression').style.display = freq === 'custom' ? 'block' : 'none';
+      }
+
+      function openForm(index) {
+        var panel = document.getElementById('job-form-panel');
+        document.getElementById('job-form-title').textContent = index >= 0 ? 'Editar tarea' : 'Nueva tarea';
+        document.getElementById('job-edit-index').value = String(index);
+        if (index >= 0 && jobs[index]) {
+          var j = jobs[index];
+          var opt = j.formOptions || {};
+          document.getElementById('job-frequency').value = opt.frequency || 'daily';
+          document.getElementById('job-minute-interval').value = opt.minuteInterval || 5;
+          document.getElementById('job-hour').value = opt.hour !== undefined ? opt.hour : 0;
+          document.getElementById('job-minute').value = opt.minute !== undefined ? opt.minute : 0;
+          document.getElementById('job-day-of-week').value = opt.dayOfWeek !== undefined ? String(opt.dayOfWeek) : '0';
+          document.getElementById('job-day-of-month').value = opt.dayOfMonth !== undefined ? opt.dayOfMonth : 1;
+          document.getElementById('job-custom-expression').value = opt.customExpression || '';
+          document.getElementById('job-command').value = j.command || '';
+        } else {
+          document.getElementById('job-frequency').value = 'daily';
+          document.getElementById('job-minute-interval').value = 5;
+          document.getElementById('job-hour').value = 0;
+          document.getElementById('job-minute').value = 0;
+          document.getElementById('job-day-of-week').value = '0';
+          document.getElementById('job-day-of-month').value = 1;
+          document.getElementById('job-custom-expression').value = '';
+          document.getElementById('job-command').value = '';
+        }
+        showFrequencyRows();
+        panel.style.display = 'block';
+      }
+
+      function closeForm() {
+        document.getElementById('job-form-panel').style.display = 'none';
+        document.getElementById('job-edit-index').value = '-1';
+      }
+
+      document.getElementById('job-frequency').addEventListener('change', showFrequencyRows);
+
+      document.getElementById('job-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var opts = {
+          frequency: document.getElementById('job-frequency').value,
+          minuteInterval: document.getElementById('job-minute-interval').value,
+          hour: document.getElementById('job-hour').value,
+          minute: document.getElementById('job-minute').value,
+          dayOfWeek: document.getElementById('job-day-of-week').value,
+          dayOfMonth: document.getElementById('job-day-of-month').value,
+          customExpression: document.getElementById('job-custom-expression').value
+        };
+        var schedule = buildCronExpression(opts);
+        var command = document.getElementById('job-command').value.trim();
+        if (!command) return;
+        var humanLabels = {
+          every_n_minutes: 'Cada ' + (opts.minuteInterval || 5) + ' min',
+          every_hour: 'Cada hora',
+          daily: 'Diario ' + String(opts.hour).padStart(2,'0') + ':' + String(opts.minute).padStart(2,'0'),
+          weekly: 'Semanal',
+          monthly: 'Mensual día ' + (opts.dayOfMonth || 1),
+          at_reboot: 'Cada vez que se inicia el sistema',
+          custom: schedule
+        };
+        var humanSchedule = humanLabels[opts.frequency] || schedule;
+        var index = parseInt(document.getElementById('job-edit-index').value, 10);
+        var newJob = { schedule: schedule, command: command, humanSchedule: humanSchedule, formOptions: opts };
+        if (index >= 0 && index < jobs.length) {
+          jobs[index] = newJob;
+        } else {
+          jobs.push(newJob);
+        }
+        renderScheduleList();
+        closeForm();
+      });
+
+      document.getElementById('btn-cancel-form').addEventListener('click', closeForm);
+      document.getElementById('btn-add-job').addEventListener('click', function () { openForm(-1); });
+
+      document.getElementById('btn-save-crontab').addEventListener('click', function () {
+        var status = document.getElementById('save-status');
+        status.textContent = 'Guardando...';
+        status.className = 'status';
+        fetch('/api/jobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jobs: jobs.map(function (j) { return { schedule: j.schedule, command: j.command }; }) })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              status.textContent = 'Crontab guardado correctamente';
+              status.className = 'status ok';
+              setTimeout(function () { location.reload(); }, 1200);
+            } else {
+              status.textContent = 'Error: ' + (data.error || 'desconocido');
+              status.className = 'status err';
+            }
+          })
+          .catch(function () {
+            status.textContent = 'Error de red';
+            status.className = 'status err';
+          });
+      });
+
+      document.getElementById('job-form-panel').style.display = 'none';
+      showFrequencyRows();
+
+      // Buscador: resultados como tarjetas editables; al buscar solo se muestran esos resultados
+      var searchInput = document.getElementById('search-input');
+      var searchResults = document.getElementById('search-results');
+      var searchVerTodas = document.getElementById('search-ver-todas');
+      var scheduleSection = document.getElementById('schedule');
+      var searchTimeout = null;
+      var lastSearchResults = [];
+
+      function renderSearchResultsFromData(results) {
+        lastSearchResults = results || [];
+        if (!results || results.length === 0) {
+          searchResults.innerHTML = '<div class="no-results">No hay tareas que coincidan.</div>';
+          searchVerTodas.style.display = 'none';
+          if (scheduleSection) scheduleSection.style.display = 'block';
+          return;
+        }
+        searchVerTodas.style.display = 'block';
+        if (scheduleSection) scheduleSection.style.display = 'none';
+        var html = '<p class="search-result-count">' + results.length + ' resultado' + (results.length !== 1 ? 's' : '') + '.</p><ul class="search-results-list">';
+        results.forEach(function (r) {
+          var idx = findJobIndex(r.schedule, r.command);
+          if (idx < 0) return;
+          var job = jobs[idx];
+          html += '<li class="job-card">' + makeJobCard(job, idx) + '</li>';
+        });
+        html += '</ul>';
+        searchResults.innerHTML = html;
+        searchResults.querySelectorAll('[data-action="edit"]').forEach(function (btn) {
+          btn.addEventListener('click', function () { openForm(parseInt(btn.getAttribute('data-index'), 10)); });
+        });
+        searchResults.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var i = parseInt(btn.getAttribute('data-index'), 10);
+            jobs.splice(i, 1);
+            renderScheduleList();
+            renderSearchResultsFromData(lastSearchResults.filter(function (r) { return findJobIndex(r.schedule, r.command) >= 0; }));
+          });
+        });
+      }
+
+      function doSearch() {
+        var q = searchInput.value.trim();
+        if (q.length === 0) {
+          searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+          searchVerTodas.style.display = 'none';
+          if (scheduleSection) scheduleSection.style.display = 'block';
+          return;
+        }
+        searchResults.innerHTML = '<div class="search-hint">Buscando...</div>';
+        fetch('/api/search?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) renderSearchResultsFromData(data.results);
+            else searchResults.innerHTML = '<div class="no-results">Error al buscar.</div>';
+          })
+          .catch(function () { searchResults.innerHTML = '<div class="no-results">Error de red.</div>'; });
+      }
+
+      document.getElementById('btn-ver-todas').addEventListener('click', function () {
+        searchInput.value = '';
+        searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+        searchVerTodas.style.display = 'none';
+        if (scheduleSection) scheduleSection.style.display = 'block';
+      });
+
+      searchInput.addEventListener('input', function () {
+        clearTimeout(searchTimeout);
+        if (searchInput.value.trim().length === 0) {
+          searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+          searchVerTodas.style.display = 'none';
+          if (scheduleSection) scheduleSection.style.display = 'block';
+          return;
+        }
+        searchTimeout = setTimeout(doSearch, 280);
+      });
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); clearTimeout(searchTimeout); doSearch(); }
+      });
+
+      renderScheduleList();
+    })();
+  </script>
+</body>
+</html>
