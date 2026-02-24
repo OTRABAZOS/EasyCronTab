@@ -38,6 +38,13 @@ function createWindow(port) {
   _log('electron-main.js:createWindow', 'loadURL', { url, port }, 'E');
   // #endregion
   mainWindow.loadURL(url);
+  // Atajo Ctrl+Shift+I para abrir/cerrar DevTools (inspeccionar)
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.control && input.shift && input.key.toLowerCase() === 'i') {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
   mainWindow.on('closed', () => {
     mainWindow = null;
     if (server) {
