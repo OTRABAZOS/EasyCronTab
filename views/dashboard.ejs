@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><%= title %> – Gestor de crontab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -13,50 +16,98 @@
       <a href="/">Inicio</a>
       <a href="#schedule">Schedule</a>
       <a href="#tareas">Gestionar</a>
+      <a href="#pm2">PM2</a>
+      <a href="#config">Configuración</a>
     </nav>
   </header>
 
   <main class="main-content">
-    <p class="intro">Crea y edita tareas programadas sin tocar comandos de Linux: elige frecuencia (cada X minutos, diario, semanal…), la hora y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
+    <div class="intro-card">
+      <p class="intro intro-lead">🚀 Crea y edita tareas programadas sin tocar comandos de Linux: elige frecuencia (cada X minutos, diario, semanal…), la hora y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
+    </div>
 
     <!-- Buscador: resultados clickeables (Editar/Eliminar); al buscar solo se muestran esos resultados -->
-    <section class="search-section">
-      <h2>Buscar tareas</h2>
+    <section class="search-section card-section">
+      <h2><span class="section-emoji" aria-hidden="true">🔍</span> Buscar tareas</h2>
       <div class="search-box">
         <input type="text" id="search-input" placeholder="Ej: cron de arañas, próximas horas, backup..." autocomplete="off">
       </div>
-      <div class="search-results" id="search-results" aria-live="polite">
-        <div class="search-hint" id="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>
+      <div class="search-tip" aria-label="Ayuda de búsqueda">
+        <p>Escribe para buscar. Los resultados se pueden editar o eliminar.</p>
+        <p>Los resultados aparecerán aquí cuando busques.</p>
       </div>
+      <div class="search-results" id="search-results" aria-live="polite"></div>
       <p class="search-ver-todas" id="search-ver-todas" style="display: none; margin-top: 0.5rem;">
         <button type="button" class="btn btn-small btn-edit" id="btn-ver-todas">Ver todas las tareas</button>
       </p>
     </section>
 
     <!-- Schedule: todas las tareas ordenadas por próxima ejecución -->
-    <section class="schedule-section" id="schedule">
-      <h2>Tareas por próxima ejecución</h2>
+    <section class="schedule-section card-section" id="schedule">
+      <h2><span class="section-emoji" aria-hidden="true">📅</span> Tareas por próxima ejecución</h2>
       <p class="intro">Todas las tareas ordenadas por la próxima vez que se ejecutarán. Puedes editar o eliminar desde aquí o desde la búsqueda.</p>
       <ul class="jobs-list" id="schedule-list"></ul>
       <p class="no-jobs" id="no-jobs">No hay tareas. Añade una con el botón de abajo.</p>
     </section>
 
     <!-- Tareas: acciones y formulario -->
-    <section class="tasks-section" id="tareas">
-      <h2>Gestionar tareas</h2>
+    <section class="tasks-section card-section" id="tareas">
+      <h2><span class="section-emoji" aria-hidden="true">⚙️</span> Gestionar tareas</h2>
       <% if (typeof crontabError !== 'undefined' && crontabError) { %>
         <p class="error-message">Error al leer crontab: <%= crontabError %></p>
       <% } %>
 
       <div class="form-actions" style="margin-bottom: 1rem;">
         <button type="button" class="btn btn-primary" id="btn-add-job">Añadir tarea</button>
+        <button type="button" class="btn btn-primary" id="btn-add-from-repo">Añadir desde repositorio</button>
         <button type="button" class="btn btn-primary" id="btn-save-crontab">Guardar crontab</button>
         <span id="save-status" class="status"></span>
       </div>
 
+      <div class="how-to-repos" aria-label="Cómo programar tareas con tus repos">
+        <p><strong>¿Cómo uso la carpeta de repos para programar tareas?</strong></p>
+        <ol>
+          <li>Pulsa <strong>Añadir desde repositorio</strong>.</li>
+          <li>Si hace falta, elige la carpeta con <strong>Buscar carpeta</strong> y <strong>Guardar ruta</strong>.</li>
+          <li>Elige un <strong>repositorio</strong> en el desplegable (proyectos con <code>package.json</code>).</li>
+          <li>Elige el <strong>script</strong> a ejecutar (npm start, npm run build, etc.) y pulsa <strong>Usar este comando y definir horario</strong>.</li>
+          <li>En el formulario que se abre, define <strong>frecuencia y hora</strong> y guarda la tarea.</li>
+          <li>Por último, pulsa <strong>Guardar crontab</strong> para escribir los cambios en el sistema.</li>
+        </ol>
+      </div>
+
+      <!-- Panel: elegir repo + script para rellenar comando -->
+      <div class="job-form-panel repo-picker-panel" id="repo-picker-panel" style="display: none;">
+        <h3><span class="section-emoji" aria-hidden="true">📦</span> Añadir desde repositorio</h3>
+        <p class="intro">Elige un repositorio y un script (npm start, npm run …). Se rellenará el comando y podrás definir la frecuencia.</p>
+        <div class="form-row">
+          <label for="repo-picker-path">Carpeta de repositorios</label>
+          <div class="path-input-row">
+            <input type="text" id="repo-picker-path" placeholder="/ruta/a/mis/repos" value="<%= typeof reposPath !== 'undefined' ? reposPath : '' %>" readonly>
+            <button type="button" class="btn btn-primary" id="repo-picker-browse">Buscar carpeta</button>
+          </div>
+          <button type="button" class="btn btn-small btn-edit" id="repo-picker-save-path">Guardar ruta</button>
+          <span id="repo-picker-path-status" class="status"></span>
+        </div>
+        <div class="form-row">
+          <label for="repo-picker-repo">Repositorio</label>
+          <select id="repo-picker-repo">
+            <option value="">— Elige repositorio —</option>
+          </select>
+        </div>
+        <div class="form-row" id="repo-picker-scripts-row" style="display: none;">
+          <label>Script a ejecutar</label>
+          <ul class="repo-scripts-list" id="repo-picker-scripts"></ul>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-primary" id="repo-picker-use">Usar este comando y definir horario</button>
+          <button type="button" class="btn btn-small btn-edit" id="repo-picker-cancel">Cancelar</button>
+        </div>
+      </div>
+
       <!-- Formulario Añadir/Editar (se muestra al hacer clic en Añadir o Editar) -->
       <div class="job-form-panel" id="job-form-panel" style="display: none;">
-        <h3 id="job-form-title">Nueva tarea</h3>
+        <h3 id="job-form-title"><span class="section-emoji" aria-hidden="true">📝</span> Nueva tarea</h3>
         <form id="job-form">
           <input type="hidden" id="job-edit-index" value="-1">
           <div class="form-row">
@@ -70,6 +121,10 @@
           <div class="form-row" id="row-minute-interval" style="display: none;">
             <label for="job-minute-interval">Cada cuántos minutos</label>
             <input type="number" id="job-minute-interval" name="minuteInterval" min="1" max="59" value="5">
+          </div>
+          <div class="form-row" id="row-hour-interval" style="display: none;">
+            <label for="job-hour-interval">Cada cuántas horas</label>
+            <input type="number" id="job-hour-interval" name="hourInterval" min="1" max="24" value="1">
           </div>
           <div class="form-row form-row-inline" id="row-daily-time" style="display: none;">
             <div class="form-row">
@@ -108,7 +163,83 @@
         </form>
       </div>
     </section>
+
+    <!-- PM2: procesos gestionados por PM2 (mantener en marcha, reiniciar) -->
+    <section class="pm2-section card-section" id="pm2">
+      <h2><span class="section-emoji" aria-hidden="true">🔄</span> PM2</h2>
+      <p class="intro">Procesos que se mantienen en marcha con PM2 (servidores, <code>npm run start-all</code>, etc.). Aquí puedes ver el estado, arrancar, parar, reiniciar o eliminar. No sustituye al crontab: usa crontab para tareas que se ejecutan a una hora; usa PM2 para procesos que deben estar siempre activos.</p>
+      <div class="form-actions" style="margin-bottom: 1rem;">
+        <button type="button" class="btn btn-primary" id="pm2-btn-refresh">Actualizar lista</button>
+        <button type="button" class="btn btn-primary" id="pm2-btn-add">Añadir proceso</button>
+        <span id="pm2-status" class="status"></span>
+      </div>
+      <ul class="pm2-list jobs-list" id="pm2-list"></ul>
+      <p class="no-jobs" id="pm2-no-processes" style="display: none;">No hay procesos en PM2. Pulsa <strong>Añadir proceso</strong> para arrancar uno (por ejemplo un <code>npm run start-all</code> de un repositorio).</p>
+
+      <div class="job-form-panel repo-picker-panel" id="pm2-add-panel" style="display: none;">
+        <h3><span class="section-emoji" aria-hidden="true">➕</span> Añadir proceso PM2</h3>
+        <p class="intro">Usa la misma carpeta de repositorios que en <a href="#config">Configuración</a>. Elige un proyecto y el script a ejecutar (npm start, npm run start-all, etc.); el proceso se mantendrá en marcha con PM2.</p>
+        <div class="form-row">
+          <label for="pm2-add-path">Carpeta de repositorios</label>
+          <div class="path-input-row">
+            <input type="text" id="pm2-add-path" placeholder="Configura la carpeta en Configuración" value="<%= typeof reposPath !== 'undefined' ? reposPath : '' %>" readonly>
+            <button type="button" class="btn btn-primary" id="pm2-add-browse">Buscar carpeta</button>
+          </div>
+          <button type="button" class="btn btn-small btn-edit" id="pm2-add-save-path">Guardar ruta</button>
+          <span id="pm2-add-path-status" class="status"></span>
+        </div>
+        <div class="form-row">
+          <label for="pm2-add-repo">Proyecto</label>
+          <select id="pm2-add-repo">
+            <option value="">— Elige proyecto —</option>
+          </select>
+        </div>
+        <div class="form-row" id="pm2-add-scripts-row" style="display: none;">
+          <label>Script a ejecutar con PM2</label>
+          <ul class="repo-scripts-list" id="pm2-add-scripts"></ul>
+        </div>
+        <div class="form-row" id="pm2-add-name-row" style="display: none;">
+          <label for="pm2-add-name">Nombre del proceso en PM2 *</label>
+          <input type="text" id="pm2-add-name" placeholder="nombre-del-proceso" required>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-primary" id="pm2-add-start-btn">Arrancar con PM2</button>
+          <button type="button" class="btn btn-small btn-edit" id="pm2-add-cancel">Cancelar</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Configuración: carpeta de repositorios -->
+    <section class="config-section card-section" id="config">
+      <h2><span class="section-emoji" aria-hidden="true">📁</span> Configuración</h2>
+      <p class="intro">Carpeta donde están tus repositorios (proyectos con package.json). Después de guardar, ve a <a href="#tareas">Gestionar tareas</a> y usa <strong>Añadir desde repositorio</strong> para elegir un proyecto y un script (npm start, npm run …) y programar la ejecución.</p>
+      <div class="form-row">
+        <label for="settings-repos-path">Carpeta de repositorios</label>
+        <div class="path-input-row">
+          <input type="text" id="settings-repos-path" placeholder="/home/usuario/proyectos" value="<%= typeof reposPath !== 'undefined' ? reposPath : '' %>" readonly>
+          <button type="button" class="btn btn-primary" id="settings-browse-repos">Buscar carpeta</button>
+        </div>
+        <button type="button" class="btn btn-primary" id="settings-save-repos">Guardar</button>
+        <span id="settings-repos-status" class="status"></span>
+      </div>
+    </section>
   </main>
+
+  <!-- Modal: explorar y elegir carpeta -->
+  <div class="browse-modal-overlay" id="browse-modal-overlay" style="display: none;" aria-hidden="true">
+    <div class="browse-modal" id="browse-modal" role="dialog" aria-labelledby="browse-modal-title">
+      <h3 id="browse-modal-title"><span class="section-emoji" aria-hidden="true">📁</span> Seleccionar carpeta de repositorios</h3>
+      <p class="browse-modal-path" id="browse-modal-path"></p>
+      <div class="browse-modal-toolbar">
+        <button type="button" class="btn btn-small btn-edit" id="browse-modal-up">Subir</button>
+      </div>
+      <ul class="browse-modal-list" id="browse-modal-list"></ul>
+      <div class="browse-modal-actions">
+        <button type="button" class="btn btn-primary" id="browse-modal-use">Usar esta carpeta</button>
+        <button type="button" class="btn btn-small btn-edit" id="browse-modal-cancel">Cancelar</button>
+      </div>
+    </div>
+  </div>
 
   <script>
     (function () {
@@ -128,6 +259,10 @@
           return '*/' + n + ' * * * *';
         }
         if (f === 'every_hour') return '0 * * * *';
+        if (f === 'every_n_hours') {
+          var nh = Math.max(1, Math.min(24, parseInt(opts.hourInterval, 10) || 1));
+          return '0 */' + nh + ' * * *';
+        }
         var hour = Math.max(0, Math.min(23, parseInt(opts.hour, 10) || 0));
         var minute = Math.max(0, Math.min(59, parseInt(opts.minute, 10) || 0));
         var m = String(minute);
@@ -219,6 +354,7 @@
         var freq = document.getElementById('job-frequency').value;
         var isReboot = (freq === 'at_reboot');
         document.getElementById('row-minute-interval').style.display = (freq === 'every_n_minutes' && !isReboot) ? 'block' : 'none';
+        document.getElementById('row-hour-interval').style.display = (freq === 'every_n_hours' && !isReboot) ? 'block' : 'none';
         document.getElementById('row-daily-time').style.display = ((freq === 'daily' || freq === 'weekly' || freq === 'monthly') && !isReboot) ? 'flex' : 'none';
         document.getElementById('row-day-of-week').style.display = freq === 'weekly' ? 'block' : 'none';
         document.getElementById('row-day-of-month').style.display = freq === 'monthly' ? 'block' : 'none';
@@ -227,13 +363,14 @@
 
       function openForm(index) {
         var panel = document.getElementById('job-form-panel');
-        document.getElementById('job-form-title').textContent = index >= 0 ? 'Editar tarea' : 'Nueva tarea';
+        document.getElementById('job-form-title').innerHTML = '<span class="section-emoji" aria-hidden="true">📝</span> ' + (index >= 0 ? 'Editar tarea' : 'Nueva tarea');
         document.getElementById('job-edit-index').value = String(index);
         if (index >= 0 && jobs[index]) {
           var j = jobs[index];
           var opt = j.formOptions || {};
           document.getElementById('job-frequency').value = opt.frequency || 'daily';
           document.getElementById('job-minute-interval').value = opt.minuteInterval || 5;
+          document.getElementById('job-hour-interval').value = opt.hourInterval !== undefined ? opt.hourInterval : 1;
           document.getElementById('job-hour').value = opt.hour !== undefined ? opt.hour : 0;
           document.getElementById('job-minute').value = opt.minute !== undefined ? opt.minute : 0;
           document.getElementById('job-day-of-week').value = opt.dayOfWeek !== undefined ? String(opt.dayOfWeek) : '0';
@@ -243,6 +380,7 @@
         } else {
           document.getElementById('job-frequency').value = 'daily';
           document.getElementById('job-minute-interval').value = 5;
+          document.getElementById('job-hour-interval').value = 1;
           document.getElementById('job-hour').value = 0;
           document.getElementById('job-minute').value = 0;
           document.getElementById('job-day-of-week').value = '0';
@@ -266,6 +404,7 @@
         var opts = {
           frequency: document.getElementById('job-frequency').value,
           minuteInterval: document.getElementById('job-minute-interval').value,
+          hourInterval: document.getElementById('job-hour-interval').value,
           hour: document.getElementById('job-hour').value,
           minute: document.getElementById('job-minute').value,
           dayOfWeek: document.getElementById('job-day-of-week').value,
@@ -278,6 +417,7 @@
         var humanLabels = {
           every_n_minutes: 'Cada ' + (opts.minuteInterval || 5) + ' min',
           every_hour: 'Cada hora',
+          every_n_hours: 'Cada ' + (opts.hourInterval || 1) + ' hora' + (parseInt(opts.hourInterval, 10) === 1 ? '' : 's'),
           daily: 'Diario ' + String(opts.hour).padStart(2,'0') + ':' + String(opts.minute).padStart(2,'0'),
           weekly: 'Semanal',
           monthly: 'Mensual día ' + (opts.dayOfMonth || 1),
@@ -298,6 +438,486 @@
 
       document.getElementById('btn-cancel-form').addEventListener('click', closeForm);
       document.getElementById('btn-add-job').addEventListener('click', function () { openForm(-1); });
+
+      // ——— Modal buscar carpeta ———
+      var browseModalTargetInputId = null;
+      var browseModalCurrentPath = null;
+
+      function browseModalOpen(targetInputId) {
+        browseModalTargetInputId = targetInputId;
+        var input = document.getElementById(targetInputId);
+        var startPath = (input && input.value) ? input.value.trim() : '';
+        browseModalLoad(startPath);
+        document.getElementById('browse-modal-overlay').style.display = 'flex';
+        document.getElementById('browse-modal-overlay').setAttribute('aria-hidden', 'false');
+      }
+
+      function browseModalClose() {
+        document.getElementById('browse-modal-overlay').style.display = 'none';
+        document.getElementById('browse-modal-overlay').setAttribute('aria-hidden', 'true');
+        browseModalTargetInputId = null;
+      }
+
+      function browseModalLoad(path) {
+        var q = path ? '?path=' + encodeURIComponent(path) : '';
+        fetch('/api/browse' + q)
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (!data.ok) {
+              document.getElementById('browse-modal-path').textContent = data.error || 'Error';
+              document.getElementById('browse-modal-list').innerHTML = '';
+              document.getElementById('browse-modal-up').style.display = 'none';
+              return;
+            }
+            browseModalCurrentPath = data.currentPath;
+            document.getElementById('browse-modal-path').textContent = data.currentPath;
+            document.getElementById('browse-modal-up').style.display = data.parentPath ? 'inline-block' : 'none';
+            document.getElementById('browse-modal-up').dataset.parentPath = data.parentPath || '';
+
+            var list = document.getElementById('browse-modal-list');
+            list.innerHTML = '';
+            (data.directories || []).forEach(function (d) {
+              var li = document.createElement('li');
+              var btn = document.createElement('button');
+              btn.type = 'button';
+              btn.className = 'browse-dir-btn';
+              btn.textContent = d.name;
+              btn.dataset.path = d.path;
+              btn.addEventListener('click', function () { browseModalLoad(d.path); });
+              li.appendChild(btn);
+              list.appendChild(li);
+            });
+          })
+          .catch(function () {
+            document.getElementById('browse-modal-path').textContent = 'Error de red';
+            document.getElementById('browse-modal-list').innerHTML = '';
+          });
+      }
+
+      document.getElementById('browse-modal-up').addEventListener('click', function () {
+        var parent = this.dataset.parentPath;
+        if (parent) browseModalLoad(parent);
+      });
+
+      document.getElementById('browse-modal-use').addEventListener('click', function () {
+        if (browseModalTargetInputId && browseModalCurrentPath) {
+          var input = document.getElementById(browseModalTargetInputId);
+          if (input) input.value = browseModalCurrentPath;
+        }
+        browseModalClose();
+      });
+
+      document.getElementById('browse-modal-cancel').addEventListener('click', browseModalClose);
+      document.getElementById('browse-modal-overlay').addEventListener('click', function (e) {
+        if (e.target === this) browseModalClose();
+      });
+
+      document.getElementById('settings-browse-repos').addEventListener('click', function () {
+        browseModalOpen('settings-repos-path');
+      });
+      document.getElementById('repo-picker-browse').addEventListener('click', function () {
+        browseModalOpen('repo-picker-path');
+      });
+
+      // ——— Configuración: guardar carpeta de repos ———
+      document.getElementById('settings-save-repos').addEventListener('click', function () {
+        var input = document.getElementById('settings-repos-path');
+        var status = document.getElementById('settings-repos-status');
+        status.textContent = 'Guardando...';
+        status.className = 'status';
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reposPath: input.value.trim() })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              status.textContent = 'Guardado';
+              status.className = 'status ok';
+              document.getElementById('repo-picker-path').value = data.reposPath || '';
+            } else {
+              status.textContent = 'Error';
+              status.className = 'status err';
+            }
+          })
+          .catch(function () {
+            status.textContent = 'Error de red';
+            status.className = 'status err';
+          });
+      });
+
+      // ——— Añadir desde repositorio ———
+      var repoPickerRepos = [];
+      var repoPickerSelected = { path: null, scriptName: null, scriptCommand: null };
+
+      function repoPickerLoadRepos(pathFromClient) {
+        var url = '/api/repos';
+        if (pathFromClient) url += '?path=' + encodeURIComponent(pathFromClient);
+        return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+          repoPickerRepos = data.ok ? (data.repos || []) : [];
+          var sel = document.getElementById('repo-picker-repo');
+          sel.innerHTML = '<option value="">— Elige repositorio —</option>';
+          repoPickerRepos.forEach(function (r) {
+            var opt = document.createElement('option');
+            opt.value = r.path;
+            opt.textContent = r.name;
+            sel.appendChild(opt);
+          });
+          document.getElementById('repo-picker-scripts-row').style.display = 'none';
+          document.getElementById('repo-picker-scripts').innerHTML = '';
+          repoPickerSelected = { path: null, scriptName: null, scriptCommand: null };
+          return data;
+        });
+      }
+
+      document.getElementById('btn-add-from-repo').addEventListener('click', function () {
+        var panel = document.getElementById('repo-picker-panel');
+        panel.style.display = 'block';
+        var pathInput = document.getElementById('repo-picker-path');
+        pathInput.value = document.getElementById('settings-repos-path').value;
+        document.getElementById('repo-picker-path-status').textContent = '';
+        repoPickerLoadRepos(pathInput.value.trim()).then(function (data) {
+          if (!data.ok && data.error) {
+            document.getElementById('repo-picker-path-status').textContent = data.error;
+            document.getElementById('repo-picker-path-status').className = 'status err';
+          }
+        });
+      });
+
+      document.getElementById('repo-picker-repo').addEventListener('change', function () {
+        var path = this.value;
+        var row = document.getElementById('repo-picker-scripts-row');
+        var list = document.getElementById('repo-picker-scripts');
+        list.innerHTML = '';
+        repoPickerSelected = { path: null, scriptName: null, scriptCommand: null };
+        if (!path) {
+          row.style.display = 'none';
+          return;
+        }
+        var repo = repoPickerRepos.find(function (r) { return r.path === path; });
+        if (!repo || !repo.scripts.length) {
+          row.style.display = 'none';
+          return;
+        }
+        repo.scripts.forEach(function (s) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-small btn-edit repo-script-btn';
+          btn.textContent = s.name + ' (' + s.command + ')';
+          btn.dataset.scriptName = s.name;
+          btn.dataset.scriptCommand = s.command;
+          btn.addEventListener('click', function () {
+            list.querySelectorAll('.repo-script-btn').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            repoPickerSelected = { path: repo.path, scriptName: s.name, scriptCommand: s.command };
+          });
+          li.appendChild(btn);
+          list.appendChild(li);
+        });
+        row.style.display = 'block';
+      });
+
+      document.getElementById('repo-picker-use').addEventListener('click', function () {
+        if (!repoPickerSelected.path || !repoPickerSelected.scriptCommand) {
+          return;
+        }
+        var command = 'cd ' + repoPickerSelected.path + ' && ' + repoPickerSelected.scriptCommand;
+        document.getElementById('repo-picker-panel').style.display = 'none';
+        openForm(-1);
+        document.getElementById('job-command').value = command;
+      });
+
+      document.getElementById('repo-picker-cancel').addEventListener('click', function () {
+        document.getElementById('repo-picker-panel').style.display = 'none';
+      });
+
+      document.getElementById('repo-picker-save-path').addEventListener('click', function () {
+        var input = document.getElementById('repo-picker-path');
+        var status = document.getElementById('repo-picker-path-status');
+        status.textContent = 'Guardando...';
+        status.className = 'status';
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reposPath: input.value.trim() })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              status.textContent = 'Guardado. Recargando lista…';
+              status.className = 'status ok';
+              document.getElementById('settings-repos-path').value = data.reposPath || '';
+              repoPickerLoadRepos((data.reposPath || '').trim());
+            } else {
+              status.textContent = 'Error';
+              status.className = 'status err';
+            }
+          })
+          .catch(function () {
+            status.textContent = 'Error de red';
+            status.className = 'status err';
+          });
+      });
+
+      // ——— PM2: listar, añadir, parar, reiniciar, eliminar ———
+      var pm2List = [];
+
+      function formatUptime(ms) {
+        if (ms == null || ms < 0) return '—';
+        var s = Math.floor(ms / 1000);
+        var m = Math.floor(s / 60);
+        var h = Math.floor(m / 60);
+        s = s % 60;
+        m = m % 60;
+        if (h > 0) return h + 'h ' + m + 'm';
+        if (m > 0) return m + 'm ' + s + 's';
+        return s + 's';
+      }
+
+      function renderPM2List() {
+        var listEl = document.getElementById('pm2-list');
+        var noEl = document.getElementById('pm2-no-processes');
+        listEl.innerHTML = '';
+        if (pm2List.length === 0) {
+          noEl.style.display = 'block';
+          return;
+        }
+        noEl.style.display = 'none';
+        pm2List.forEach(function (proc) {
+          var li = document.createElement('li');
+          li.className = 'job-card';
+          var statusClass = proc.status === 'online' ? 'ok' : (proc.status === 'stopped' ? 'err' : '');
+          var statusText = proc.status === 'online' ? 'En marcha' : (proc.status === 'stopped' ? 'Parado' : proc.status);
+          var html = '<div class="job-info">' +
+            '<div class="job-schedule-human"><strong>' + escapeHtml(proc.name) + '</strong></div>' +
+            '<div class="job-human-command">Estado: <span class="status ' + statusClass + '">' + escapeHtml(statusText) + '</span>' +
+            (proc.pid ? ' · PID ' + proc.pid : '') +
+            (proc.uptime != null ? ' · Uptime ' + formatUptime(proc.uptime) : '') +
+            '</div>' +
+            (proc.cwd ? '<div class="job-command">' + escapeHtml(proc.cwd) + '</div>' : '') +
+            '</div>' +
+            '<div class="job-actions">' +
+            '<button type="button" class="btn-small btn-edit pm2-stop" data-name="' + escapeHtml(proc.name) + '">Parar</button>' +
+            '<button type="button" class="btn-small btn-edit pm2-restart" data-name="' + escapeHtml(proc.name) + '">Reiniciar</button>' +
+            '<button type="button" class="btn-small btn-delete pm2-delete" data-name="' + escapeHtml(proc.name) + '">Eliminar</button>' +
+            '</div>';
+          li.innerHTML = html;
+          listEl.appendChild(li);
+        });
+        listEl.querySelectorAll('.pm2-stop').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('stop', btn.getAttribute('data-name')); });
+        });
+        listEl.querySelectorAll('.pm2-restart').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('restart', btn.getAttribute('data-name')); });
+        });
+        listEl.querySelectorAll('.pm2-delete').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('delete', btn.getAttribute('data-name')); });
+        });
+      }
+
+      function pm2Action(action, name) {
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Ejecutando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              statusEl.textContent = 'Hecho';
+              statusEl.className = 'status ok';
+              loadPM2List();
+            } else {
+              statusEl.textContent = data.error || 'Error';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            statusEl.textContent = 'Error de red';
+            statusEl.className = 'status err';
+          });
+      }
+
+      function loadPM2List() {
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Cargando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/list')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              pm2List = data.list || [];
+              renderPM2List();
+              statusEl.textContent = '';
+            } else {
+              pm2List = [];
+              renderPM2List();
+              statusEl.textContent = data.error || 'Error al cargar PM2';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            pm2List = [];
+            renderPM2List();
+            statusEl.textContent = 'Error de red (¿PM2 instalado?)';
+            statusEl.className = 'status err';
+          });
+      }
+
+      document.getElementById('pm2-btn-refresh').addEventListener('click', loadPM2List);
+      // PM2: lista de repos (misma que en Añadir desde repositorio)
+      var pm2Repos = [];
+      var pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+
+      function pm2AddLoadRepos(pathFromClient) {
+        var url = '/api/repos';
+        if (pathFromClient) url += '?path=' + encodeURIComponent(pathFromClient);
+        return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+          pm2Repos = data.ok ? (data.repos || []) : [];
+          var sel = document.getElementById('pm2-add-repo');
+          sel.innerHTML = '<option value="">— Elige proyecto —</option>';
+          pm2Repos.forEach(function (r) {
+            var opt = document.createElement('option');
+            opt.value = r.path;
+            opt.textContent = r.name;
+            sel.appendChild(opt);
+          });
+          document.getElementById('pm2-add-scripts-row').style.display = 'none';
+          document.getElementById('pm2-add-scripts').innerHTML = '';
+          document.getElementById('pm2-add-name-row').style.display = 'none';
+          pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+          return data;
+        });
+      }
+
+      document.getElementById('pm2-btn-add').addEventListener('click', function () {
+        document.getElementById('pm2-add-panel').style.display = 'block';
+        document.getElementById('pm2-add-path').value = document.getElementById('settings-repos-path').value;
+        document.getElementById('pm2-add-path-status').textContent = '';
+        pm2AddLoadRepos(document.getElementById('pm2-add-path').value.trim()).then(function (data) {
+          if (!data.ok && data.error) {
+            document.getElementById('pm2-add-path-status').textContent = data.error;
+            document.getElementById('pm2-add-path-status').className = 'status err';
+          }
+        });
+      });
+      document.getElementById('pm2-add-cancel').addEventListener('click', function () {
+        document.getElementById('pm2-add-panel').style.display = 'none';
+      });
+      document.getElementById('pm2-add-browse').addEventListener('click', function () {
+        browseModalOpen('pm2-add-path');
+      });
+      document.getElementById('pm2-add-save-path').addEventListener('click', function () {
+        var input = document.getElementById('pm2-add-path');
+        var status = document.getElementById('pm2-add-path-status');
+        status.textContent = 'Guardando...';
+        status.className = 'status';
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reposPath: input.value.trim() })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              status.textContent = 'Guardado. Recargando lista…';
+              status.className = 'status ok';
+              document.getElementById('settings-repos-path').value = data.reposPath || '';
+              pm2AddLoadRepos((data.reposPath || '').trim());
+            } else {
+              status.textContent = 'Error';
+              status.className = 'status err';
+            }
+          })
+          .catch(function () {
+            status.textContent = 'Error de red';
+            status.className = 'status err';
+          });
+      });
+
+      document.getElementById('pm2-add-repo').addEventListener('change', function () {
+        var path = this.value;
+        var row = document.getElementById('pm2-add-scripts-row');
+        var list = document.getElementById('pm2-add-scripts');
+        list.innerHTML = '';
+        document.getElementById('pm2-add-name-row').style.display = 'none';
+        pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+        if (!path) {
+          row.style.display = 'none';
+          return;
+        }
+        var repo = pm2Repos.find(function (r) { return r.path === path; });
+        if (!repo || !repo.scripts.length) {
+          row.style.display = 'none';
+          return;
+        }
+        repo.scripts.forEach(function (s) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-small btn-edit pm2-script-btn';
+          btn.textContent = s.name + ' (' + s.command + ')';
+          btn.dataset.scriptName = s.name;
+          btn.dataset.scriptCommand = s.command;
+          btn.addEventListener('click', function () {
+            list.querySelectorAll('.pm2-script-btn').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            pm2Selected = { path: repo.path, name: repo.name, scriptName: s.name, scriptCommand: s.command };
+            document.getElementById('pm2-add-name').value = repo.name;
+            document.getElementById('pm2-add-name-row').style.display = 'block';
+          });
+          li.appendChild(btn);
+          list.appendChild(li);
+        });
+        row.style.display = 'block';
+      });
+
+      document.getElementById('pm2-add-start-btn').addEventListener('click', function () {
+        if (!pm2Selected.path || !pm2Selected.scriptCommand) {
+          document.getElementById('pm2-status').textContent = 'Elige un proyecto y un script';
+          document.getElementById('pm2-status').className = 'status err';
+          return;
+        }
+        var name = document.getElementById('pm2-add-name').value.trim();
+        if (!name) {
+          document.getElementById('pm2-status').textContent = 'Indica el nombre del proceso';
+          document.getElementById('pm2-status').className = 'status err';
+          return;
+        }
+        var script = 'npm';
+        var args = pm2Selected.scriptName === 'start' ? 'start' : ('run ' + pm2Selected.scriptName);
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Arrancando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, cwd: pm2Selected.path, script: script, args: args })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              statusEl.textContent = 'Proceso arrancado';
+              statusEl.className = 'status ok';
+              document.getElementById('pm2-add-panel').style.display = 'none';
+              loadPM2List();
+            } else {
+              statusEl.textContent = data.error || 'Error';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            statusEl.textContent = 'Error de red';
+            statusEl.className = 'status err';
+          });
+      });
+
+      loadPM2List();
 
       document.getElementById('btn-save-crontab').addEventListener('click', function () {
         var status = document.getElementById('save-status');
@@ -371,7 +991,7 @@
       function doSearch() {
         var q = searchInput.value.trim();
         if (q.length === 0) {
-          searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+          searchResults.innerHTML = '';
           searchVerTodas.style.display = 'none';
           if (scheduleSection) scheduleSection.style.display = 'block';
           return;
@@ -388,7 +1008,7 @@
 
       document.getElementById('btn-ver-todas').addEventListener('click', function () {
         searchInput.value = '';
-        searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+        searchResults.innerHTML = '';
         searchVerTodas.style.display = 'none';
         if (scheduleSection) scheduleSection.style.display = 'block';
       });
@@ -396,7 +1016,7 @@
       searchInput.addEventListener('input', function () {
         clearTimeout(searchTimeout);
         if (searchInput.value.trim().length === 0) {
-          searchResults.innerHTML = '<div class="search-hint">Escribe para buscar. Los resultados se pueden editar o eliminar.</div>';
+          searchResults.innerHTML = '';
           searchVerTodas.style.display = 'none';
           if (scheduleSection) scheduleSection.style.display = 'block';
           return;
