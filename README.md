@@ -94,6 +94,25 @@ Los archivos quedan en la carpeta `dist/`.
 
 ---
 
+## Cómo actualizar a una versión nueva
+
+Cuando publiques mejoras en GitHub, los usuarios pueden actualizar así:
+
+**Si usan el código (clonaron el repo y ejecutan con `npm start` o `npm run app`):**
+```bash
+cd EasyCronTab
+git pull
+npm install
+```
+Luego reinician el servidor o la app como de costumbre.
+
+**Si instalaron el .deb o usan el AppImage:**  
+Ve a la pestaña **Releases** del repositorio en GitHub, descarga la última versión (el `.deb` o el AppImage) y reinstálala:
+- **.deb:** `sudo dpkg -i easycrontab_X.X.X_amd64.deb`
+- **AppImage:** sustituye el archivo anterior por el nuevo y ejecútalo.
+
+---
+
 ## Guía de uso (primeros pasos en la interfaz)
 
 La interfaz tiene varias pestañas/secciones. Orden recomendado:
