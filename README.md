@@ -124,6 +124,8 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
 - Pulsa **Guardar**.  
   Así podrás elegir proyectos y scripts desde **Gestionar tareas** y **PM2** sin escribir rutas a mano.
 
+**Qué se lista:** Se muestran las **subcarpetas directas** de esa ruta que tengan `package.json` (también enlaces simbólicos a proyectos). Si un proyecto no tiene `scripts` en su `package.json`, aparece igual con la opción "npm start" por defecto para poder usarlo.
+
 ### 2. Crontab (tareas programadas)
 
 - **Buscar tareas**: escribe en la barra de búsqueda (ej.: "backup", "diario", "próximas horas") para filtrar.
