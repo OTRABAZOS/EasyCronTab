@@ -16,6 +16,7 @@
       <a href="/">Inicio</a>
       <a href="#schedule">Schedule</a>
       <a href="#tareas">Gestionar</a>
+      <a href="#pm2">PM2</a>
       <a href="#config">Configuración</a>
     </nav>
   </header>
@@ -158,6 +159,49 @@
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Guardar tarea</button>
             <button type="button" class="btn btn-small btn-edit" id="btn-cancel-form">Cancelar</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- PM2: procesos gestionados por PM2 (mantener en marcha, reiniciar) -->
+    <section class="pm2-section card-section" id="pm2">
+      <h2><span class="section-emoji" aria-hidden="true">🔄</span> PM2</h2>
+      <p class="intro">Procesos que se mantienen en marcha con PM2 (servidores, <code>npm run start-all</code>, etc.). Aquí puedes ver el estado, arrancar, parar, reiniciar o eliminar. No sustituye al crontab: usa crontab para tareas que se ejecutan a una hora; usa PM2 para procesos que deben estar siempre activos.</p>
+      <div class="form-actions" style="margin-bottom: 1rem;">
+        <button type="button" class="btn btn-primary" id="pm2-btn-refresh">Actualizar lista</button>
+        <button type="button" class="btn btn-primary" id="pm2-btn-add">Añadir proceso</button>
+        <span id="pm2-status" class="status"></span>
+      </div>
+      <ul class="pm2-list jobs-list" id="pm2-list"></ul>
+      <p class="no-jobs" id="pm2-no-processes" style="display: none;">No hay procesos en PM2. Pulsa <strong>Añadir proceso</strong> para arrancar uno (por ejemplo un <code>npm run start-all</code> de un repositorio).</p>
+
+      <div class="job-form-panel repo-picker-panel" id="pm2-add-panel" style="display: none;">
+        <h3><span class="section-emoji" aria-hidden="true">➕</span> Añadir proceso PM2</h3>
+        <p class="intro">Nombre único, carpeta de trabajo (opcional) y comando. Para <code>npm run start-all</code> usa script <strong>npm</strong> y argumentos <strong>run start-all</strong>.</p>
+        <form id="pm2-add-form">
+          <div class="form-row">
+            <label for="pm2-add-name">Nombre del proceso *</label>
+            <input type="text" id="pm2-add-name" placeholder="mi-app" required>
+          </div>
+          <div class="form-row">
+            <label for="pm2-add-cwd">Carpeta de trabajo (opcional)</label>
+            <div class="path-input-row">
+              <input type="text" id="pm2-add-cwd" placeholder="/ruta/al/proyecto" readonly>
+              <button type="button" class="btn btn-primary" id="pm2-add-browse">Buscar carpeta</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="pm2-add-script">Script * (ej: npm, node)</label>
+            <input type="text" id="pm2-add-script" value="npm" placeholder="npm">
+          </div>
+          <div class="form-row">
+            <label for="pm2-add-args">Argumentos (ej: run start-all)</label>
+            <input type="text" id="pm2-add-args" placeholder="run start-all">
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary">Arrancar con PM2</button>
+            <button type="button" class="btn btn-small btn-edit" id="pm2-add-cancel">Cancelar</button>
           </div>
         </form>
       </div>
@@ -614,6 +658,162 @@
             status.className = 'status err';
           });
       });
+
+      // ——— PM2: listar, añadir, parar, reiniciar, eliminar ———
+      var pm2List = [];
+
+      function formatUptime(ms) {
+        if (ms == null || ms < 0) return '—';
+        var s = Math.floor(ms / 1000);
+        var m = Math.floor(s / 60);
+        var h = Math.floor(m / 60);
+        s = s % 60;
+        m = m % 60;
+        if (h > 0) return h + 'h ' + m + 'm';
+        if (m > 0) return m + 'm ' + s + 's';
+        return s + 's';
+      }
+
+      function renderPM2List() {
+        var listEl = document.getElementById('pm2-list');
+        var noEl = document.getElementById('pm2-no-processes');
+        listEl.innerHTML = '';
+        if (pm2List.length === 0) {
+          noEl.style.display = 'block';
+          return;
+        }
+        noEl.style.display = 'none';
+        pm2List.forEach(function (proc) {
+          var li = document.createElement('li');
+          li.className = 'job-card';
+          var statusClass = proc.status === 'online' ? 'ok' : (proc.status === 'stopped' ? 'err' : '');
+          var statusText = proc.status === 'online' ? 'En marcha' : (proc.status === 'stopped' ? 'Parado' : proc.status);
+          var html = '<div class="job-info">' +
+            '<div class="job-schedule-human"><strong>' + escapeHtml(proc.name) + '</strong></div>' +
+            '<div class="job-human-command">Estado: <span class="status ' + statusClass + '">' + escapeHtml(statusText) + '</span>' +
+            (proc.pid ? ' · PID ' + proc.pid : '') +
+            (proc.uptime != null ? ' · Uptime ' + formatUptime(proc.uptime) : '') +
+            '</div>' +
+            (proc.cwd ? '<div class="job-command">' + escapeHtml(proc.cwd) + '</div>' : '') +
+            '</div>' +
+            '<div class="job-actions">' +
+            '<button type="button" class="btn-small btn-edit pm2-stop" data-name="' + escapeHtml(proc.name) + '">Parar</button>' +
+            '<button type="button" class="btn-small btn-edit pm2-restart" data-name="' + escapeHtml(proc.name) + '">Reiniciar</button>' +
+            '<button type="button" class="btn-small btn-delete pm2-delete" data-name="' + escapeHtml(proc.name) + '">Eliminar</button>' +
+            '</div>';
+          li.innerHTML = html;
+          listEl.appendChild(li);
+        });
+        listEl.querySelectorAll('.pm2-stop').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('stop', btn.getAttribute('data-name')); });
+        });
+        listEl.querySelectorAll('.pm2-restart').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('restart', btn.getAttribute('data-name')); });
+        });
+        listEl.querySelectorAll('.pm2-delete').forEach(function (btn) {
+          btn.addEventListener('click', function () { pm2Action('delete', btn.getAttribute('data-name')); });
+        });
+      }
+
+      function pm2Action(action, name) {
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Ejecutando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/' + action, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              statusEl.textContent = 'Hecho';
+              statusEl.className = 'status ok';
+              loadPM2List();
+            } else {
+              statusEl.textContent = data.error || 'Error';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            statusEl.textContent = 'Error de red';
+            statusEl.className = 'status err';
+          });
+      }
+
+      function loadPM2List() {
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Cargando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/list')
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              pm2List = data.list || [];
+              renderPM2List();
+              statusEl.textContent = '';
+            } else {
+              pm2List = [];
+              renderPM2List();
+              statusEl.textContent = data.error || 'Error al cargar PM2';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            pm2List = [];
+            renderPM2List();
+            statusEl.textContent = 'Error de red (¿PM2 instalado?)';
+            statusEl.className = 'status err';
+          });
+      }
+
+      document.getElementById('pm2-btn-refresh').addEventListener('click', loadPM2List);
+      document.getElementById('pm2-btn-add').addEventListener('click', function () {
+        document.getElementById('pm2-add-panel').style.display = 'block';
+        document.getElementById('pm2-add-name').value = '';
+        document.getElementById('pm2-add-cwd').value = '';
+        document.getElementById('pm2-add-script').value = 'npm';
+        document.getElementById('pm2-add-args').value = '';
+      });
+      document.getElementById('pm2-add-cancel').addEventListener('click', function () {
+        document.getElementById('pm2-add-panel').style.display = 'none';
+      });
+      document.getElementById('pm2-add-browse').addEventListener('click', function () {
+        browseModalOpen('pm2-add-cwd');
+      });
+      document.getElementById('pm2-add-form').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var name = document.getElementById('pm2-add-name').value.trim();
+        var cwd = document.getElementById('pm2-add-cwd').value.trim();
+        var script = document.getElementById('pm2-add-script').value.trim() || 'npm';
+        var args = document.getElementById('pm2-add-args').value.trim();
+        if (!name) return;
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Arrancando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, cwd: cwd || undefined, script: script, args: args || undefined })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              statusEl.textContent = 'Proceso arrancado';
+              statusEl.className = 'status ok';
+              document.getElementById('pm2-add-panel').style.display = 'none';
+              loadPM2List();
+            } else {
+              statusEl.textContent = data.error || 'Error';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            statusEl.textContent = 'Error de red';
+            statusEl.className = 'status err';
+          });
+      });
+      loadPM2List();
 
       document.getElementById('btn-save-crontab').addEventListener('click', function () {
         var status = document.getElementById('save-status');

@@ -77,9 +77,10 @@ Los artefactos quedan en `dist/`.
 1. **Buscar tareas**: en la barra de búsqueda escribe, por ejemplo:
    - "cron para las próximas horas"
    - "tarea de arañas", "backup", "diario", "noche"
-2. **Editar crontab**: en la sección Crontab, modifica el texto y pulsa **Guardar crontab**.
+2. **Editar crontab**: en la sección Gestionar tareas, modifica y pulsa **Guardar crontab**.
+3. **PM2**: en la pestaña **PM2** puedes ver procesos gestionados por PM2, arrancar uno nuevo (nombre, carpeta, script tipo `npm` y argumentos tipo `run start-all`), parar, reiniciar o eliminar.
 
-Los cambios reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
+Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 
 ---
 
@@ -105,6 +106,7 @@ Con la app instalada (.deb o AppImage), la configuración se guarda en `~/.confi
 
 - **Interfaz web**: edita el crontab en un editor de texto y guarda con un clic.
 - **Buscador en lenguaje natural**: frases como "próximas horas", "backup", "diario" para filtrar tareas.
+- **PM2**: gestiona procesos que deben estar siempre en marcha (servidores, `npm run start-all`, etc.): listar, arrancar, parar, reiniciar y eliminar desde la misma interfaz.
 - **Diseño claro**: cards, estados ok/error, estilo panel de control.
 - **Solo Linux**: usa `crontab -l` y `crontab -` del usuario que ejecuta la app.
 

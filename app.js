@@ -9,6 +9,7 @@ const { commandToDescription } = require('./lib/commandDescribe');
 const { getSettings, setReposPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
+const pm2 = require('./lib/pm2');
 
 const app = express();
 const PORT = config.server.port;
@@ -139,6 +140,45 @@ app.get('/api/repos/command', (req, res) => {
   }
   const command = buildCronCommand(repoPath, scriptName);
   res.json({ ok: true, command });
+});
+
+// API PM2: listar procesos
+app.get('/api/pm2/list', (req, res) => {
+  pm2.list()
+    .then(list => res.json({ ok: true, list }))
+    .catch(err => res.status(500).json({ ok: false, error: err.message || String(err) }));
+});
+
+// API PM2: arrancar proceso (body: name, cwd?, script, args?)
+app.post('/api/pm2/start', (req, res) => {
+  const { name, cwd, script, args } = req.body || {};
+  pm2.start({ name, cwd, script, args })
+    .then(() => res.json({ ok: true }))
+    .catch(err => res.status(400).json({ ok: false, error: err.message || String(err) }));
+});
+
+// API PM2: parar proceso (body: name o id)
+app.post('/api/pm2/stop', (req, res) => {
+  const { name, id } = req.body || {};
+  pm2.stop({ name, id })
+    .then(() => res.json({ ok: true }))
+    .catch(err => res.status(400).json({ ok: false, error: err.message || String(err) }));
+});
+
+// API PM2: reiniciar proceso (body: name o id)
+app.post('/api/pm2/restart', (req, res) => {
+  const { name, id } = req.body || {};
+  pm2.restart({ name, id })
+    .then(() => res.json({ ok: true }))
+    .catch(err => res.status(400).json({ ok: false, error: err.message || String(err) }));
+});
+
+// API PM2: eliminar proceso (body: name o id)
+app.post('/api/pm2/delete', (req, res) => {
+  const { name, id } = req.body || {};
+  pm2.delete({ name, id })
+    .then(() => res.json({ ok: true }))
+    .catch(err => res.status(400).json({ ok: false, error: err.message || String(err) }));
 });
 
 // API búsqueda: devuelve tareas que coinciden con la consulta
