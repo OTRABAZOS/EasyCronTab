@@ -94,6 +94,25 @@ Los archivos quedan en la carpeta `dist/`.
 
 ---
 
+## Cómo actualizar a una versión nueva
+
+Cuando publiques mejoras en GitHub, los usuarios pueden actualizar así:
+
+**Si usan el código (clonaron el repo y ejecutan con `npm start` o `npm run app`):**
+```bash
+cd EasyCronTab
+git pull
+npm install
+```
+Luego reinician el servidor o la app como de costumbre.
+
+**Si instalaron el .deb o usan el AppImage:**  
+Ve a la pestaña **Releases** del repositorio en GitHub, descarga la última versión (el `.deb` o el AppImage) y reinstálala:
+- **.deb:** `sudo dpkg -i easycrontab_X.X.X_amd64.deb`
+- **AppImage:** sustituye el archivo anterior por el nuevo y ejecútalo.
+
+---
+
 ## Guía de uso (primeros pasos en la interfaz)
 
 La interfaz tiene varias pestañas/secciones. Orden recomendado:
@@ -105,12 +124,14 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
 - Pulsa **Guardar**.  
   Así podrás elegir proyectos y scripts desde **Gestionar tareas** y **PM2** sin escribir rutas a mano.
 
+**Qué se lista:** Se muestran las **subcarpetas directas** de esa ruta que tengan `package.json` (también enlaces simbólicos a proyectos). Si un proyecto no tiene `scripts` en su `package.json`, aparece igual con la opción "npm start" por defecto para poder usarlo.
+
 ### 2. Crontab (tareas programadas)
 
 - **Buscar tareas**: escribe en la barra de búsqueda (ej.: "backup", "diario", "próximas horas") para filtrar.
 - **Ver todas**: en **Tareas por próxima ejecución** ves todas las tareas ordenadas por la próxima ejecución.
 - **Añadir tarea**: en **Gestionar tareas** pulsa **Añadir tarea** (escribes comando y frecuencia) o **Añadir desde repositorio** (eliges proyecto y script de la lista, luego frecuencia).
-- **Guardar**: después de editar, pulsa **Guardar crontab** para aplicar los cambios al sistema.
+- **Guardar**: después de editar, pulsa **Guardar** para aplicar los cambios al sistema.
 
 ### 3. PM2 (procesos siempre en marcha)
 
@@ -122,7 +143,7 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
   4. Elige el **script** a ejecutar (npm start, npm run start-all, etc.).
   5. Ajusta el **nombre del proceso** si quieres y pulsa **Arrancar con PM2**.
 - Desde la lista puedes **Actualizar lista**, **Parar**, **Reiniciar** o **Eliminar** cada proceso.
-- Pulsa **Guardar lista PM2** para persistir la lista en disco (equivalente a `pm2 save`); así, si has configurado `pm2 startup` una vez en la terminal, los procesos se restaurarán al reiniciar la máquina.
+- Pulsa **Guardar** para persistir la lista de PM2 en disco (equivalente a `pm2 save`); así, si has configurado `pm2 startup` una vez en la terminal, los procesos se restaurarán al reiniciar la máquina.
 
 Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 
