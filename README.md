@@ -122,6 +122,7 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
   4. Elige el **script** a ejecutar (npm start, npm run start-all, etc.).
   5. Ajusta el **nombre del proceso** si quieres y pulsa **Arrancar con PM2**.
 - Desde la lista puedes **Actualizar lista**, **Parar**, **Reiniciar** o **Eliminar** cada proceso.
+- Pulsa **Guardar lista PM2** para persistir la lista en disco (equivalente a `pm2 save`); así, si has configurado `pm2 startup` una vez en la terminal, los procesos se restaurarán al reiniciar la máquina.
 
 Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 

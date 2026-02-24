@@ -181,6 +181,13 @@ app.post('/api/pm2/delete', (req, res) => {
     .catch(err => res.status(400).json({ ok: false, error: err.message || String(err) }));
 });
 
+// API PM2: guardar lista de procesos (pm2 save) para que persistan al reiniciar
+app.post('/api/pm2/save', (req, res) => {
+  pm2.save()
+    .then(() => res.json({ ok: true }))
+    .catch(err => res.status(500).json({ ok: false, error: err.message || String(err) }));
+});
+
 // API búsqueda: devuelve tareas que coinciden con la consulta
 app.get('/api/search', (req, res) => {
   const q = (req.query.q || '').trim();

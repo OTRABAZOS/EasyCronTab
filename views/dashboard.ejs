@@ -171,6 +171,7 @@
       <div class="form-actions" style="margin-bottom: 1rem;">
         <button type="button" class="btn btn-primary" id="pm2-btn-refresh">Actualizar lista</button>
         <button type="button" class="btn btn-primary" id="pm2-btn-add">Añadir proceso</button>
+        <button type="button" class="btn btn-small btn-edit" id="pm2-btn-save" title="Guarda la lista de procesos para que se restauren al reiniciar (ejecuta pm2 save). Configura también pm2 startup una vez en la terminal.">Guardar lista PM2</button>
         <span id="pm2-status" class="status"></span>
       </div>
       <ul class="pm2-list jobs-list" id="pm2-list"></ul>
@@ -771,6 +772,26 @@
       }
 
       document.getElementById('pm2-btn-refresh').addEventListener('click', loadPM2List);
+      document.getElementById('pm2-btn-save').addEventListener('click', function () {
+        var statusEl = document.getElementById('pm2-status');
+        statusEl.textContent = 'Guardando...';
+        statusEl.className = 'status';
+        fetch('/api/pm2/save', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              statusEl.textContent = 'Lista guardada (se restaurará al reiniciar si configuraste pm2 startup)';
+              statusEl.className = 'status ok';
+            } else {
+              statusEl.textContent = data.error || 'Error';
+              statusEl.className = 'status err';
+            }
+          })
+          .catch(function () {
+            statusEl.textContent = 'Error de red';
+            statusEl.className = 'status err';
+          });
+      });
       // PM2: lista de repos (misma que en Añadir desde repositorio)
       var pm2Repos = [];
       var pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
