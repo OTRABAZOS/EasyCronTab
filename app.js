@@ -4,7 +4,7 @@ const config = require('./config');
 const { readCrontab, writeCrontab, parseCrontabLines } = require('./lib/crontab');
 const { buildSearchIndex, search } = require('./lib/search');
 const { cronToHuman, cronToFormOptions, FRECUENCIAS, DIAS_SEMANA } = require('./lib/cronSchedule');
-const { getNextRun } = require('./lib/nextRun');
+const { getNextRun, getRunsForDay } = require('./lib/nextRun');
 const { commandToDescription } = require('./lib/commandDescribe');
 const { getSettings, setReposPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
@@ -71,6 +71,55 @@ app.get('/api/jobs', (req, res) => {
     };
   });
   res.json({ ok: true, jobs });
+});
+
+// API jobs: vista día — ejecuciones por franjas de 15 min para una fecha
+app.get('/api/jobs/day', (req, res) => {
+  const result = readCrontab();
+  if (!result.ok) {
+    return res.status(500).json({ ok: false, error: result.error });
+  }
+  const tasks = parseCrontabLines(result.content);
+  let dateStr = typeof req.query.date === 'string' ? req.query.date.trim() : '';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const today = new Date();
+    dateStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  }
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const startOfDay = new Date(y, m - 1, d, 0, 0, 0, 0);
+  const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999);
+
+  const jobsWithRuns = tasks.map(t => ({
+    schedule: t.schedule,
+    command: t.command,
+    humanSchedule: cronToHuman(t.schedule),
+    humanCommand: commandToDescription(t.command),
+    runs: getRunsForDay(t.schedule, dateStr)
+  }));
+
+  const slotCount = 96;
+  const slots = [];
+  for (let i = 0; i < slotCount; i++) {
+    const minutesFromMidnight = i * 15;
+    const h = Math.floor(minutesFromMidnight / 60);
+    const min = minutesFromMidnight % 60;
+    const timeLabel = String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+    slots.push({ time: timeLabel, minutesFromMidnight, jobs: [] });
+  }
+
+  jobsWithRuns.forEach(({ schedule, command, humanSchedule, humanCommand, runs }) => {
+    runs.forEach(run => {
+      const runDate = run instanceof Date ? run : new Date(run);
+      if (runDate.getTime() < startOfDay.getTime() || runDate.getTime() > endOfDay.getTime()) return;
+      const minutesFromMidnight = runDate.getHours() * 60 + runDate.getMinutes() + runDate.getSeconds() / 60;
+      const slotIndex = Math.min(Math.floor(minutesFromMidnight / 15), slotCount - 1);
+      if (slotIndex >= 0 && slotIndex < slotCount) {
+        slots[slotIndex].jobs.push({ schedule, command, humanSchedule, humanCommand });
+      }
+    });
+  });
+
+  res.json({ ok: true, date: dateStr, slots });
 });
 
 // API jobs: guardar (reemplaza todo el crontab con la lista enviada)

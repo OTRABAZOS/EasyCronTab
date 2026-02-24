@@ -12,22 +12,23 @@
 <body>
   <header class="header">
     <h1>🕒 EasyCronTab</h1>
-    <nav>
-      <a href="/">Inicio</a>
-      <a href="#schedule">Schedule</a>
-      <a href="#tareas">Gestionar</a>
-      <a href="#pm2">PM2</a>
-      <a href="#config">Configuración</a>
+    <nav id="main-nav">
+      <a href="#inicio" class="nav-link" data-view="inicio">Inicio</a>
+      <a href="#schedule" class="nav-link" data-view="schedule">Ejecuciones</a>
+      <a href="#vista-dia" class="nav-link" data-view="vista-dia">Concurrencia</a>
+      <a href="#tareas" class="nav-link" data-view="tareas">Tareas</a>
+      <a href="#pm2" class="nav-link" data-view="pm2">PM2</a>
+      <a href="#config" class="nav-link" data-view="config">Configuración</a>
     </nav>
   </header>
 
   <main class="main-content">
-    <div class="intro-card">
+    <div class="intro-card content-section" id="intro-card">
       <p class="intro intro-lead">🚀 Crea y edita tareas programadas sin tocar comandos de Linux: elige frecuencia (cada X minutos, diario, semanal…), la hora y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
     </div>
 
     <!-- Buscador: resultados clickeables (Editar/Eliminar); al buscar solo se muestran esos resultados -->
-    <section class="search-section card-section">
+    <section class="search-section card-section content-section" id="search-section">
       <h2><span class="section-emoji" aria-hidden="true">🔍</span> Buscar tareas</h2>
       <div class="search-box">
         <input type="text" id="search-input" placeholder="Ej: cron de arañas, próximas horas, backup..." autocomplete="off">
@@ -43,16 +44,29 @@
     </section>
 
     <!-- Schedule: todas las tareas ordenadas por próxima ejecución -->
-    <section class="schedule-section card-section" id="schedule">
+    <section class="schedule-section card-section content-section" id="schedule">
       <h2><span class="section-emoji" aria-hidden="true">📅</span> Tareas por próxima ejecución</h2>
       <p class="intro">Todas las tareas ordenadas por la próxima vez que se ejecutarán. Puedes editar o eliminar desde aquí o desde la búsqueda.</p>
       <ul class="jobs-list" id="schedule-list"></ul>
       <p class="no-jobs" id="no-jobs">No hay tareas. Añade una con el botón de abajo.</p>
     </section>
 
+    <!-- Concurrencia: calendario del día con horarios y coincidencias -->
+    <section class="card-section content-section" id="vista-dia">
+      <h2><span class="section-emoji" aria-hidden="true">🕐</span> Concurrencia</h2>
+      <p class="intro">Ejecuciones programadas para un día. Las franjas con más de una tarea a la vez se resaltan para que veas posibles coincidencias.</p>
+      <div class="day-view-controls">
+        <label for="day-view-date">Fecha:</label>
+        <input type="date" id="day-view-date" aria-label="Seleccionar fecha">
+      </div>
+      <div id="day-view-status" class="status" aria-live="polite"></div>
+      <div id="day-view-timeline" class="day-view-timeline"></div>
+      <p class="no-jobs" id="day-view-no-runs" style="display: none;">No hay ejecuciones programadas para este día.</p>
+    </section>
+
     <!-- Tareas: acciones y formulario -->
-    <section class="tasks-section card-section" id="tareas">
-      <h2><span class="section-emoji" aria-hidden="true">⚙️</span> Gestionar tareas</h2>
+    <section class="tasks-section card-section content-section" id="tareas">
+      <h2><span class="section-emoji" aria-hidden="true">⚙️</span> Crear tareas</h2>
       <% if (typeof crontabError !== 'undefined' && crontabError) { %>
         <p class="error-message">Error al leer crontab: <%= crontabError %></p>
       <% } %>
@@ -60,7 +74,7 @@
       <div class="form-actions" style="margin-bottom: 1rem;">
         <button type="button" class="btn btn-primary" id="btn-add-job">Añadir tarea</button>
         <button type="button" class="btn btn-primary" id="btn-add-from-repo">Añadir desde repositorio</button>
-        <button type="button" class="btn btn-primary" id="btn-save-crontab">Guardar crontab</button>
+        <button type="button" class="btn btn-primary" id="btn-save-crontab" title="Escribir los cambios en el crontab del sistema">Guardar</button>
         <span id="save-status" class="status"></span>
       </div>
 
@@ -72,7 +86,7 @@
           <li>Elige un <strong>repositorio</strong> en el desplegable (proyectos con <code>package.json</code>).</li>
           <li>Elige el <strong>script</strong> a ejecutar (npm start, npm run build, etc.) y pulsa <strong>Usar este comando y definir horario</strong>.</li>
           <li>En el formulario que se abre, define <strong>frecuencia y hora</strong> y guarda la tarea.</li>
-          <li>Por último, pulsa <strong>Guardar crontab</strong> para escribir los cambios en el sistema.</li>
+          <li>Por último, pulsa <strong>Guardar</strong> para escribir los cambios en el sistema.</li>
         </ol>
       </div>
 
@@ -165,13 +179,13 @@
     </section>
 
     <!-- PM2: procesos gestionados por PM2 (mantener en marcha, reiniciar) -->
-    <section class="pm2-section card-section" id="pm2">
+    <section class="pm2-section card-section content-section" id="pm2">
       <h2><span class="section-emoji" aria-hidden="true">🔄</span> PM2</h2>
       <p class="intro">Procesos que se mantienen en marcha con PM2 (servidores, <code>npm run start-all</code>, etc.). Aquí puedes ver el estado, arrancar, parar, reiniciar o eliminar. No sustituye al crontab: usa crontab para tareas que se ejecutan a una hora; usa PM2 para procesos que deben estar siempre activos.</p>
       <div class="form-actions" style="margin-bottom: 1rem;">
         <button type="button" class="btn btn-primary" id="pm2-btn-refresh">Actualizar lista</button>
         <button type="button" class="btn btn-primary" id="pm2-btn-add">Añadir proceso</button>
-        <button type="button" class="btn btn-small btn-edit" id="pm2-btn-save" title="Guarda la lista de procesos para que se restauren al reiniciar (ejecuta pm2 save). Configura también pm2 startup una vez en la terminal.">Guardar lista PM2</button>
+        <button type="button" class="btn btn-small btn-edit" id="pm2-btn-save" title="Guardar lista de procesos PM2 para que se restauren al reiniciar (pm2 save)">Guardar</button>
         <span id="pm2-status" class="status"></span>
       </div>
       <ul class="pm2-list jobs-list" id="pm2-list"></ul>
@@ -212,9 +226,9 @@
     </section>
 
     <!-- Configuración: carpeta de repositorios -->
-    <section class="config-section card-section" id="config">
+    <section class="config-section card-section content-section" id="config">
       <h2><span class="section-emoji" aria-hidden="true">📁</span> Configuración</h2>
-      <p class="intro">Carpeta donde están tus repositorios (proyectos con package.json). Después de guardar, ve a <a href="#tareas">Gestionar tareas</a> y usa <strong>Añadir desde repositorio</strong> para elegir un proyecto y un script (npm start, npm run …) y programar la ejecución.</p>
+      <p class="intro">Carpeta donde están tus repositorios (proyectos con package.json). Después de guardar, ve a Crear tareas y usa <strong>Añadir desde repositorio</strong> para elegir un proyecto y un script (npm start, npm run …) y programar la ejecución.</p>
       <div class="form-row">
         <label for="settings-repos-path">Carpeta de repositorios</label>
         <div class="path-input-row">
@@ -247,6 +261,37 @@
     (function () {
       var jobs = <%- JSON.stringify(typeof jobs !== 'undefined' ? jobs : []) %>;
       var FREQUENCIAS = <%- JSON.stringify(typeof FRECUENCIAS !== 'undefined' ? FRECUENCIAS : []) %>;
+
+      // Navegación por vistas: al hacer clic en el menú se muestra solo esa sección (sin anclas de una sola página)
+      var VIEW_SECTIONS = {
+        'inicio': ['intro-card', 'search-section', 'vista-dia'],
+        'schedule': ['schedule'],
+        'vista-dia': ['vista-dia'],
+        'tareas': ['tareas'],
+        'pm2': ['pm2'],
+        'config': ['config']
+      };
+      function switchView(viewName) {
+        var ids = VIEW_SECTIONS[viewName];
+        if (!ids) viewName = 'inicio'; ids = VIEW_SECTIONS[viewName];
+        document.querySelectorAll('.content-section').forEach(function (el) {
+          el.style.display = ids.indexOf(el.id) >= 0 ? 'block' : 'none';
+        });
+        document.querySelectorAll('#main-nav .nav-link').forEach(function (a) {
+          a.classList.toggle('nav-active', a.getAttribute('data-view') === viewName);
+        });
+        if (location.hash !== '#' + viewName) location.hash = viewName;
+      }
+      document.getElementById('main-nav').addEventListener('click', function (e) {
+        var a = e.target.closest('a[data-view]');
+        if (a) { e.preventDefault(); switchView(a.getAttribute('data-view')); }
+      });
+      window.addEventListener('hashchange', function () {
+        var view = (location.hash || '#inicio').slice(1);
+        if (VIEW_SECTIONS[view]) switchView(view);
+      });
+      var initialView = (location.hash && VIEW_SECTIONS[location.hash.slice(1)]) ? location.hash.slice(1) : 'inicio';
+      switchView(initialView);
 
       function buildCronExpression(opts) {
         var f = opts.frequency;
@@ -364,6 +409,7 @@
       }
 
       function openForm(index) {
+        switchView('tareas');
         var panel = document.getElementById('job-form-panel');
         document.getElementById('job-form-title').innerHTML = '<span class="section-emoji" aria-hidden="true">📝</span> ' + (index >= 0 ? 'Editar tarea' : 'Nueva tarea');
         document.getElementById('job-edit-index').value = String(index);
@@ -1051,6 +1097,92 @@
       });
 
       renderScheduleList();
+
+      // Concurrencia: cargar ejecuciones del día seleccionado
+      var dayViewDate = document.getElementById('day-view-date');
+      var dayViewTimeline = document.getElementById('day-view-timeline');
+      var dayViewStatus = document.getElementById('day-view-status');
+      var dayViewNoRuns = document.getElementById('day-view-no-runs');
+      function formatDateForInput(d) {
+        var y = d.getFullYear();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+      if (dayViewDate && !dayViewDate.value) dayViewDate.value = formatDateForInput(new Date());
+      function loadDayView() {
+        var date = dayViewDate ? dayViewDate.value : formatDateForInput(new Date());
+        if (!date) return;
+        if (dayViewStatus) dayViewStatus.textContent = 'Cargando...';
+        if (dayViewNoRuns) dayViewNoRuns.style.display = 'none';
+        fetch('/api/jobs/day?date=' + encodeURIComponent(date))
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (dayViewStatus) dayViewStatus.textContent = '';
+            if (!data.ok) {
+              if (dayViewStatus) dayViewStatus.textContent = data.error || 'Error';
+              return;
+            }
+            var slotsWithJobs = (data.slots || []).filter(function (s) { return s.jobs && s.jobs.length > 0; });
+            if (slotsWithJobs.length === 0) {
+              if (dayViewNoRuns) dayViewNoRuns.style.display = 'block';
+              if (dayViewTimeline) dayViewTimeline.innerHTML = '';
+              return;
+            }
+            if (dayViewNoRuns) dayViewNoRuns.style.display = 'none';
+            var html = '<ul class="day-view-slots">';
+            slotsWithJobs.forEach(function (slot) {
+              var multiple = slot.jobs.length > 1;
+              html += '<li class="day-view-slot' + (multiple ? ' day-view-slot--multiple' : '') + '">';
+              html += '<div class="day-view-slot-time">' + escapeHtml(slot.time) + '</div>';
+              html += '<ul class="day-view-slot-jobs">';
+              slot.jobs.forEach(function (job) {
+                var idx = findJobIndex(job.schedule, job.command);
+                var canEdit = idx >= 0;
+                html += '<li class="day-view-job' + (canEdit ? ' day-view-job--clickable' : '') + '" data-job-index="' + (canEdit ? idx : -1) + '">';
+                html += '<span class="day-view-job-label">' + escapeHtml(job.humanCommand || job.command || job.humanSchedule || job.schedule) + '</span>';
+                if (canEdit) {
+                  html += '<span class="day-view-job-actions">';
+                  html += '<button type="button" class="btn-small btn-edit day-view-job-edit" data-job-index="' + idx + '" title="Editar tarea">Editar</button> ';
+                  html += '<button type="button" class="btn-small btn-delete day-view-job-delete" data-job-index="' + idx + '" title="Eliminar tarea">Eliminar</button>';
+                  html += '</span>';
+                }
+                html += '</li>';
+              });
+              html += '</ul>';
+              if (multiple) html += '<div class="day-view-slot-badge">' + slot.jobs.length + ' tareas</div>';
+              html += '</li>';
+            });
+            html += '</ul>';
+            if (dayViewTimeline) {
+              dayViewTimeline.innerHTML = html;
+              dayViewTimeline.querySelectorAll('.day-view-job-edit').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                  e.stopPropagation();
+                  var i = parseInt(btn.getAttribute('data-job-index'), 10);
+                  if (i >= 0) openForm(i);
+                });
+              });
+              dayViewTimeline.querySelectorAll('.day-view-job-delete').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                  e.stopPropagation();
+                  var i = parseInt(btn.getAttribute('data-job-index'), 10);
+                  if (i >= 0) {
+                    jobs.splice(i, 1);
+                    renderScheduleList();
+                    loadDayView();
+                    if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
+                  }
+                });
+              });
+            }
+          })
+          .catch(function (err) {
+            if (dayViewStatus) dayViewStatus.textContent = 'Error de red: ' + (err.message || 'desconocido');
+          });
+      }
+      if (dayViewDate) dayViewDate.addEventListener('change', loadDayView);
+      loadDayView();
     })();
   </script>
 </body>

@@ -131,7 +131,7 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
 - **Buscar tareas**: escribe en la barra de búsqueda (ej.: "backup", "diario", "próximas horas") para filtrar.
 - **Ver todas**: en **Tareas por próxima ejecución** ves todas las tareas ordenadas por la próxima ejecución.
 - **Añadir tarea**: en **Gestionar tareas** pulsa **Añadir tarea** (escribes comando y frecuencia) o **Añadir desde repositorio** (eliges proyecto y script de la lista, luego frecuencia).
-- **Guardar**: después de editar, pulsa **Guardar crontab** para aplicar los cambios al sistema.
+- **Guardar**: después de editar, pulsa **Guardar** para aplicar los cambios al sistema.
 
 ### 3. PM2 (procesos siempre en marcha)
 
@@ -143,7 +143,7 @@ La interfaz tiene varias pestañas/secciones. Orden recomendado:
   4. Elige el **script** a ejecutar (npm start, npm run start-all, etc.).
   5. Ajusta el **nombre del proceso** si quieres y pulsa **Arrancar con PM2**.
 - Desde la lista puedes **Actualizar lista**, **Parar**, **Reiniciar** o **Eliminar** cada proceso.
-- Pulsa **Guardar lista PM2** para persistir la lista en disco (equivalente a `pm2 save`); así, si has configurado `pm2 startup` una vez en la terminal, los procesos se restaurarán al reiniciar la máquina.
+- Pulsa **Guardar** para persistir la lista de PM2 en disco (equivalente a `pm2 save`); así, si has configurado `pm2 startup` una vez en la terminal, los procesos se restaurarán al reiniciar la máquina.
 
 Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 
