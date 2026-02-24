@@ -19,6 +19,7 @@
       <a href="#tareas" class="nav-link" data-view="tareas">Tareas</a>
       <a href="#pm2" class="nav-link" data-view="pm2">PM2</a>
       <a href="#config" class="nav-link" data-view="config">Configuración</a>
+      <a href="#acerca" class="nav-link" data-view="acerca">Acerca de</a>
     </nav>
   </header>
 
@@ -140,6 +141,10 @@
             <label for="job-hour-interval">Cada cuántas horas</label>
             <input type="number" id="job-hour-interval" name="hourInterval" min="1" max="24" value="1">
           </div>
+          <div class="form-row" id="row-every-n-hours-minute" style="display: none;">
+            <label for="job-every-n-hours-minute">En el minuto (0-59)</label>
+            <input type="number" id="job-every-n-hours-minute" name="everyNHoursMinute" min="0" max="59" value="0" placeholder="0">
+          </div>
           <div class="form-row form-row-inline" id="row-daily-time" style="display: none;">
             <div class="form-row">
               <label for="job-hour">Hora (0-23)</label>
@@ -239,6 +244,21 @@
         <span id="settings-repos-status" class="status"></span>
       </div>
     </section>
+
+    <!-- Acerca de: versión y desarrollador -->
+    <section class="card-section content-section" id="acerca">
+      <h2><span class="section-emoji" aria-hidden="true">ℹ️</span> Acerca de</h2>
+      <div class="about-content">
+        <p class="about-app-name">EasyCronTab</p>
+        <p class="about-version">Versión <strong><%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %></strong></p>
+        <% if (typeof appDescription !== 'undefined' && appDescription) { %>
+        <p class="about-description"><%= appDescription %></p>
+        <% } %>
+        <p class="about-repo">
+          <a href="<%= typeof appRepo !== 'undefined' ? appRepo : 'https://github.com/OTRABAZOS/EasyCronTab' %>" target="_blank" rel="noopener noreferrer">Repositorio en GitHub</a>
+        </p>
+      </div>
+    </section>
   </main>
 
   <!-- Modal: explorar y elegir carpeta -->
@@ -269,7 +289,8 @@
         'vista-dia': ['vista-dia'],
         'tareas': ['tareas'],
         'pm2': ['pm2'],
-        'config': ['config']
+        'config': ['config'],
+        'acerca': ['acerca']
       };
       function switchView(viewName) {
         var ids = VIEW_SECTIONS[viewName];
@@ -308,7 +329,8 @@
         if (f === 'every_hour') return '0 * * * *';
         if (f === 'every_n_hours') {
           var nh = Math.max(1, Math.min(24, parseInt(opts.hourInterval, 10) || 1));
-          return '0 */' + nh + ' * * *';
+          var everyNMin = Math.max(0, Math.min(59, parseInt(opts.everyNHoursMinute ?? opts.minute, 10) || 0));
+          return everyNMin + ' */' + nh + ' * * *';
         }
         var hour = Math.max(0, Math.min(23, parseInt(opts.hour, 10) || 0));
         var minute = Math.max(0, Math.min(59, parseInt(opts.minute, 10) || 0));
@@ -402,6 +424,7 @@
         var isReboot = (freq === 'at_reboot');
         document.getElementById('row-minute-interval').style.display = (freq === 'every_n_minutes' && !isReboot) ? 'block' : 'none';
         document.getElementById('row-hour-interval').style.display = (freq === 'every_n_hours' && !isReboot) ? 'block' : 'none';
+        document.getElementById('row-every-n-hours-minute').style.display = (freq === 'every_n_hours' && !isReboot) ? 'block' : 'none';
         document.getElementById('row-daily-time').style.display = ((freq === 'daily' || freq === 'weekly' || freq === 'monthly') && !isReboot) ? 'flex' : 'none';
         document.getElementById('row-day-of-week').style.display = freq === 'weekly' ? 'block' : 'none';
         document.getElementById('row-day-of-month').style.display = freq === 'monthly' ? 'block' : 'none';
@@ -419,6 +442,7 @@
           document.getElementById('job-frequency').value = opt.frequency || 'daily';
           document.getElementById('job-minute-interval').value = opt.minuteInterval || 5;
           document.getElementById('job-hour-interval').value = opt.hourInterval !== undefined ? opt.hourInterval : 1;
+          document.getElementById('job-every-n-hours-minute').value = (opt.minute !== undefined ? opt.minute : 0);
           document.getElementById('job-hour').value = opt.hour !== undefined ? opt.hour : 0;
           document.getElementById('job-minute').value = opt.minute !== undefined ? opt.minute : 0;
           document.getElementById('job-day-of-week').value = opt.dayOfWeek !== undefined ? String(opt.dayOfWeek) : '0';
@@ -429,6 +453,7 @@
           document.getElementById('job-frequency').value = 'daily';
           document.getElementById('job-minute-interval').value = 5;
           document.getElementById('job-hour-interval').value = 1;
+          document.getElementById('job-every-n-hours-minute').value = 0;
           document.getElementById('job-hour').value = 0;
           document.getElementById('job-minute').value = 0;
           document.getElementById('job-day-of-week').value = '0';
@@ -453,6 +478,7 @@
           frequency: document.getElementById('job-frequency').value,
           minuteInterval: document.getElementById('job-minute-interval').value,
           hourInterval: document.getElementById('job-hour-interval').value,
+          everyNHoursMinute: document.getElementById('job-every-n-hours-minute').value,
           hour: document.getElementById('job-hour').value,
           minute: document.getElementById('job-minute').value,
           dayOfWeek: document.getElementById('job-day-of-week').value,
@@ -462,10 +488,11 @@
         var schedule = buildCronExpression(opts);
         var command = document.getElementById('job-command').value.trim();
         if (!command) return;
+        var everyNMin = parseInt(opts.everyNHoursMinute ?? opts.minute, 10) || 0;
         var humanLabels = {
           every_n_minutes: 'Cada ' + (opts.minuteInterval || 5) + ' min',
           every_hour: 'Cada hora',
-          every_n_hours: 'Cada ' + (opts.hourInterval || 1) + ' hora' + (parseInt(opts.hourInterval, 10) === 1 ? '' : 's'),
+          every_n_hours: 'Cada ' + (opts.hourInterval || 1) + ' hora' + (parseInt(opts.hourInterval, 10) === 1 ? '' : 's') + (everyNMin > 0 ? ' al min ' + everyNMin : ''),
           daily: 'Diario ' + String(opts.hour).padStart(2,'0') + ':' + String(opts.minute).padStart(2,'0'),
           weekly: 'Semanal',
           monthly: 'Mensual día ' + (opts.dayOfMonth || 1),
@@ -1140,6 +1167,7 @@
                 var idx = findJobIndex(job.schedule, job.command);
                 var canEdit = idx >= 0;
                 html += '<li class="day-view-job' + (canEdit ? ' day-view-job--clickable' : '') + '" data-job-index="' + (canEdit ? idx : -1) + '">';
+                if (job.runTime) html += '<span class="day-view-job-time">' + escapeHtml(job.runTime) + '</span> ';
                 html += '<span class="day-view-job-label">' + escapeHtml(job.humanCommand || job.command || job.humanSchedule || job.schedule) + '</span>';
                 if (canEdit) {
                   html += '<span class="day-view-job-actions">';

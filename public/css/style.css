@@ -375,6 +375,13 @@ body {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.day-view-job-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 0.35rem;
+}
+
 .day-view-job-label {
   flex: 1;
   min-width: 0;
@@ -677,6 +684,35 @@ body {
   font-size: 1rem;
   background: var(--bg-card-alt);
   color: var(--text);
+}
+
+/* Acerca de */
+.about-content {
+  padding: 0.5rem 0;
+}
+.about-content .about-app-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.25rem;
+}
+.about-content .about-version {
+  font-size: 1rem;
+  color: var(--text);
+  margin-bottom: 0.75rem;
+}
+.about-content .about-description {
+  color: var(--text-muted);
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+.about-content .about-repo a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.about-content .about-repo a:hover {
+  text-decoration: underline;
 }
 
 /* Guía / instrucciones: misma tarjeta + tenue fondo azulado para diferenciar como ayuda */

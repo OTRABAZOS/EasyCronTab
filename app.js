@@ -11,6 +11,11 @@ const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
 
+const pkg = require('./package.json');
+const appVersion = pkg.version || '0.0.0';
+const appDescription = pkg.description || '';
+const appRepo = 'https://github.com/OTRABAZOS/EasyCronTab';
+
 const app = express();
 const PORT = config.server.port;
 
@@ -47,7 +52,10 @@ app.get('/', (req, res) => {
     jobs,
     FRECUENCIAS,
     DIAS_SEMANA,
-    reposPath: settings.reposPath || ''
+    reposPath: settings.reposPath || '',
+    appVersion,
+    appDescription,
+    appRepo
   });
 });
 
@@ -114,7 +122,8 @@ app.get('/api/jobs/day', (req, res) => {
       const minutesFromMidnight = runDate.getHours() * 60 + runDate.getMinutes() + runDate.getSeconds() / 60;
       const slotIndex = Math.min(Math.floor(minutesFromMidnight / 15), slotCount - 1);
       if (slotIndex >= 0 && slotIndex < slotCount) {
-        slots[slotIndex].jobs.push({ schedule, command, humanSchedule, humanCommand });
+        const runTime = String(runDate.getHours()).padStart(2, '0') + ':' + String(runDate.getMinutes()).padStart(2, '0');
+        slots[slotIndex].jobs.push({ schedule, command, humanSchedule, humanCommand, runTime });
       }
     });
   });
