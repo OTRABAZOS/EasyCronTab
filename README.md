@@ -78,7 +78,7 @@ Los artefactos quedan en `dist/`.
    - "cron para las próximas horas"
    - "tarea de arañas", "backup", "diario", "noche"
 2. **Editar crontab**: en la sección Gestionar tareas, modifica y pulsa **Guardar crontab**.
-3. **PM2**: en la pestaña **PM2** puedes ver procesos gestionados por PM2, arrancar uno nuevo (nombre, carpeta, script tipo `npm` y argumentos tipo `run start-all`), parar, reiniciar o eliminar.
+3. **PM2**: en la pestaña **PM2** puedes ver procesos gestionados por PM2. Para añadir uno, usa la misma carpeta de repositorios que en Configuración: elige un **proyecto** de la lista, el **script** a ejecutar (npm start, npm run start-all, etc.) y un nombre para el proceso; luego **Arrancar con PM2**. También puedes parar, reiniciar o eliminar desde la lista.
 
 Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 

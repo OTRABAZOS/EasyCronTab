@@ -178,32 +178,34 @@
 
       <div class="job-form-panel repo-picker-panel" id="pm2-add-panel" style="display: none;">
         <h3><span class="section-emoji" aria-hidden="true">➕</span> Añadir proceso PM2</h3>
-        <p class="intro">Nombre único, carpeta de trabajo (opcional) y comando. Para <code>npm run start-all</code> usa script <strong>npm</strong> y argumentos <strong>run start-all</strong>.</p>
-        <form id="pm2-add-form">
-          <div class="form-row">
-            <label for="pm2-add-name">Nombre del proceso *</label>
-            <input type="text" id="pm2-add-name" placeholder="mi-app" required>
+        <p class="intro">Usa la misma carpeta de repositorios que en <a href="#config">Configuración</a>. Elige un proyecto y el script a ejecutar (npm start, npm run start-all, etc.); el proceso se mantendrá en marcha con PM2.</p>
+        <div class="form-row">
+          <label for="pm2-add-path">Carpeta de repositorios</label>
+          <div class="path-input-row">
+            <input type="text" id="pm2-add-path" placeholder="Configura la carpeta en Configuración" value="<%= typeof reposPath !== 'undefined' ? reposPath : '' %>" readonly>
+            <button type="button" class="btn btn-primary" id="pm2-add-browse">Buscar carpeta</button>
           </div>
-          <div class="form-row">
-            <label for="pm2-add-cwd">Carpeta de trabajo (opcional)</label>
-            <div class="path-input-row">
-              <input type="text" id="pm2-add-cwd" placeholder="/ruta/al/proyecto" readonly>
-              <button type="button" class="btn btn-primary" id="pm2-add-browse">Buscar carpeta</button>
-            </div>
-          </div>
-          <div class="form-row">
-            <label for="pm2-add-script">Script * (ej: npm, node)</label>
-            <input type="text" id="pm2-add-script" value="npm" placeholder="npm">
-          </div>
-          <div class="form-row">
-            <label for="pm2-add-args">Argumentos (ej: run start-all)</label>
-            <input type="text" id="pm2-add-args" placeholder="run start-all">
-          </div>
-          <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Arrancar con PM2</button>
-            <button type="button" class="btn btn-small btn-edit" id="pm2-add-cancel">Cancelar</button>
-          </div>
-        </form>
+          <button type="button" class="btn btn-small btn-edit" id="pm2-add-save-path">Guardar ruta</button>
+          <span id="pm2-add-path-status" class="status"></span>
+        </div>
+        <div class="form-row">
+          <label for="pm2-add-repo">Proyecto</label>
+          <select id="pm2-add-repo">
+            <option value="">— Elige proyecto —</option>
+          </select>
+        </div>
+        <div class="form-row" id="pm2-add-scripts-row" style="display: none;">
+          <label>Script a ejecutar con PM2</label>
+          <ul class="repo-scripts-list" id="pm2-add-scripts"></ul>
+        </div>
+        <div class="form-row" id="pm2-add-name-row" style="display: none;">
+          <label for="pm2-add-name">Nombre del proceso en PM2 *</label>
+          <input type="text" id="pm2-add-name" placeholder="nombre-del-proceso" required>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-primary" id="pm2-add-start-btn">Arrancar con PM2</button>
+          <button type="button" class="btn btn-small btn-edit" id="pm2-add-cancel">Cancelar</button>
+        </div>
       </div>
     </section>
 
@@ -768,33 +770,134 @@
       }
 
       document.getElementById('pm2-btn-refresh').addEventListener('click', loadPM2List);
+      // PM2: lista de repos (misma que en Añadir desde repositorio)
+      var pm2Repos = [];
+      var pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+
+      function pm2AddLoadRepos(pathFromClient) {
+        var url = '/api/repos';
+        if (pathFromClient) url += '?path=' + encodeURIComponent(pathFromClient);
+        return fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+          pm2Repos = data.ok ? (data.repos || []) : [];
+          var sel = document.getElementById('pm2-add-repo');
+          sel.innerHTML = '<option value="">— Elige proyecto —</option>';
+          pm2Repos.forEach(function (r) {
+            var opt = document.createElement('option');
+            opt.value = r.path;
+            opt.textContent = r.name;
+            sel.appendChild(opt);
+          });
+          document.getElementById('pm2-add-scripts-row').style.display = 'none';
+          document.getElementById('pm2-add-scripts').innerHTML = '';
+          document.getElementById('pm2-add-name-row').style.display = 'none';
+          pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+          return data;
+        });
+      }
+
       document.getElementById('pm2-btn-add').addEventListener('click', function () {
         document.getElementById('pm2-add-panel').style.display = 'block';
-        document.getElementById('pm2-add-name').value = '';
-        document.getElementById('pm2-add-cwd').value = '';
-        document.getElementById('pm2-add-script').value = 'npm';
-        document.getElementById('pm2-add-args').value = '';
+        document.getElementById('pm2-add-path').value = document.getElementById('settings-repos-path').value;
+        document.getElementById('pm2-add-path-status').textContent = '';
+        pm2AddLoadRepos(document.getElementById('pm2-add-path').value.trim()).then(function (data) {
+          if (!data.ok && data.error) {
+            document.getElementById('pm2-add-path-status').textContent = data.error;
+            document.getElementById('pm2-add-path-status').className = 'status err';
+          }
+        });
       });
       document.getElementById('pm2-add-cancel').addEventListener('click', function () {
         document.getElementById('pm2-add-panel').style.display = 'none';
       });
       document.getElementById('pm2-add-browse').addEventListener('click', function () {
-        browseModalOpen('pm2-add-cwd');
+        browseModalOpen('pm2-add-path');
       });
-      document.getElementById('pm2-add-form').addEventListener('submit', function (e) {
-        e.preventDefault();
+      document.getElementById('pm2-add-save-path').addEventListener('click', function () {
+        var input = document.getElementById('pm2-add-path');
+        var status = document.getElementById('pm2-add-path-status');
+        status.textContent = 'Guardando...';
+        status.className = 'status';
+        fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reposPath: input.value.trim() })
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              status.textContent = 'Guardado. Recargando lista…';
+              status.className = 'status ok';
+              document.getElementById('settings-repos-path').value = data.reposPath || '';
+              pm2AddLoadRepos((data.reposPath || '').trim());
+            } else {
+              status.textContent = 'Error';
+              status.className = 'status err';
+            }
+          })
+          .catch(function () {
+            status.textContent = 'Error de red';
+            status.className = 'status err';
+          });
+      });
+
+      document.getElementById('pm2-add-repo').addEventListener('change', function () {
+        var path = this.value;
+        var row = document.getElementById('pm2-add-scripts-row');
+        var list = document.getElementById('pm2-add-scripts');
+        list.innerHTML = '';
+        document.getElementById('pm2-add-name-row').style.display = 'none';
+        pm2Selected = { path: null, name: null, scriptName: null, scriptCommand: null };
+        if (!path) {
+          row.style.display = 'none';
+          return;
+        }
+        var repo = pm2Repos.find(function (r) { return r.path === path; });
+        if (!repo || !repo.scripts.length) {
+          row.style.display = 'none';
+          return;
+        }
+        repo.scripts.forEach(function (s) {
+          var li = document.createElement('li');
+          var btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-small btn-edit pm2-script-btn';
+          btn.textContent = s.name + ' (' + s.command + ')';
+          btn.dataset.scriptName = s.name;
+          btn.dataset.scriptCommand = s.command;
+          btn.addEventListener('click', function () {
+            list.querySelectorAll('.pm2-script-btn').forEach(function (b) { b.classList.remove('selected'); });
+            btn.classList.add('selected');
+            pm2Selected = { path: repo.path, name: repo.name, scriptName: s.name, scriptCommand: s.command };
+            document.getElementById('pm2-add-name').value = repo.name;
+            document.getElementById('pm2-add-name-row').style.display = 'block';
+          });
+          li.appendChild(btn);
+          list.appendChild(li);
+        });
+        row.style.display = 'block';
+      });
+
+      document.getElementById('pm2-add-start-btn').addEventListener('click', function () {
+        if (!pm2Selected.path || !pm2Selected.scriptCommand) {
+          document.getElementById('pm2-status').textContent = 'Elige un proyecto y un script';
+          document.getElementById('pm2-status').className = 'status err';
+          return;
+        }
         var name = document.getElementById('pm2-add-name').value.trim();
-        var cwd = document.getElementById('pm2-add-cwd').value.trim();
-        var script = document.getElementById('pm2-add-script').value.trim() || 'npm';
-        var args = document.getElementById('pm2-add-args').value.trim();
-        if (!name) return;
+        if (!name) {
+          document.getElementById('pm2-status').textContent = 'Indica el nombre del proceso';
+          document.getElementById('pm2-status').className = 'status err';
+          return;
+        }
+        var script = 'npm';
+        var args = pm2Selected.scriptName === 'start' ? 'start' : ('run ' + pm2Selected.scriptName);
         var statusEl = document.getElementById('pm2-status');
         statusEl.textContent = 'Arrancando...';
         statusEl.className = 'status';
         fetch('/api/pm2/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name, cwd: cwd || undefined, script: script, args: args || undefined })
+          body: JSON.stringify({ name: name, cwd: pm2Selected.path, script: script, args: args })
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
@@ -813,6 +916,7 @@
             statusEl.className = 'status err';
           });
       });
+
       loadPM2List();
 
       document.getElementById('btn-save-crontab').addEventListener('click', function () {
