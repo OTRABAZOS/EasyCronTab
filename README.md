@@ -12,79 +12,122 @@ Gestor de crontab para Linux con interfaz web y buscador en lenguaje natural. Si
 
 ---
 
-## Uso rápido (desde GitHub)
+## Formas de usar EasyCronTab
 
-Clona el repositorio, instala dependencias y arranca:
+| Forma | Descripción |
+|-------|-------------|
+| **Web (navegador)** | Clonas el repo, `npm start`, y abres http://localhost:3000 en el navegador. |
+| **App de escritorio (sin instalar)** | `npm run app`: se abre una ventana de Electron. |
+| **App instalada (.deb)** | Generas el `.deb`, lo instalas con `dpkg -i`, y abres EasyCronTab desde el menú de aplicaciones. |
+| **AppImage (portable)** | Generas el AppImage y lo ejecutas sin instalar nada. |
 
-```bash
-git clone https://github.com/TU_USUARIO/EasyCronTab.git
-cd EasyCronTab
-npm install
-npm start
-```
+La interfaz es la misma en todos los casos: buscador de tareas, gestión de crontab, PM2 y configuración.
 
-Abre en el navegador: **http://localhost:3000**
+---
+
+## Método 1: Uso por web (navegador)
+
+1. Clona el repositorio:
+   ```bash
+   git clone https://github.com/TU_USUARIO/EasyCronTab.git
+   cd EasyCronTab
+   ```
+2. Instala dependencias:
+   ```bash
+   npm install
+   ```
+3. Arranca el servidor:
+   ```bash
+   npm start
+   ```
+4. Abre en el navegador: **http://localhost:3000**
 
 > Cuando subas el proyecto a GitHub, sustituye `TU_USUARIO` por tu usuario o organización en la URL del `git clone`.
 
 ---
 
-## Opción: app de escritorio (Electron)
+## Método 2: App de escritorio (Electron, sin instalar)
 
-Puedes usar EasyCronTab como aplicación de escritorio (ventana propia, icono en el menú, anclaje en la barra).
-
-### En desarrollo (sin instalar)
-
-```bash
-npm run app
-```
-
-Se abre una ventana de Electron; no hace falta abrir el navegador.
-
-### Instalador para Ubuntu / Debian
-
-Genera el `.deb` e instálalo:
-
-```bash
-npm run build:deb
-sudo dpkg -i dist/easycrontab_1.0.0_amd64.deb
-```
-
-Abre **EasyCronTab** desde el menú de aplicaciones. Si ya lo tenías instalado, reinstala el `.deb` para que el icono y el anclaje en la barra se actualicen.
-
-### AppImage (portable, sin instalar)
-
-```bash
-npm run build:appimage
-chmod +x dist/EasyCronTab-1.0.0.AppImage
-./dist/EasyCronTab-1.0.0.AppImage
-```
-
-Puedes copiar el AppImage a `~/.local/bin` o donde quieras.
-
-### Build completo (.deb + AppImage)
-
-```bash
-npm run build
-```
-
-Los artefactos quedan en `dist/`.
+1. En la carpeta del proyecto (después de `git clone` y `npm install`):
+   ```bash
+   npm run app
+   ```
+2. Se abrirá una ventana de Electron con la misma interfaz; no hace falta abrir el navegador.
 
 ---
 
-## Cómo se usa
+## Método 3: App instalada en el sistema (.deb)
 
-1. **Buscar tareas**: en la barra de búsqueda escribe, por ejemplo:
-   - "cron para las próximas horas"
-   - "tarea de arañas", "backup", "diario", "noche"
-2. **Editar crontab**: en la sección Gestionar tareas, modifica y pulsa **Guardar crontab**.
-3. **PM2**: en la pestaña **PM2** puedes ver procesos gestionados por PM2. Para añadir uno, usa la misma carpeta de repositorios que en Configuración: elige un **proyecto** de la lista, el **script** a ejecutar (npm start, npm run start-all, etc.) y un nombre para el proceso; luego **Arrancar con PM2**. También puedes parar, reiniciar o eliminar desde la lista.
+Para tener EasyCronTab en el menú de aplicaciones (Ubuntu, Debian y derivados):
+
+1. En la carpeta del proyecto:
+   ```bash
+   npm run build:deb
+   ```
+2. Instala el paquete generado:
+   ```bash
+   sudo dpkg -i dist/easycrontab_1.0.0_amd64.deb
+   ```
+3. Abre **EasyCronTab** desde el menú de aplicaciones (búscalo por nombre).
+4. Si ya lo tenías instalado, reinstala el `.deb` para actualizar (por ejemplo el icono y la sección PM2).
+
+---
+
+## Método 4: AppImage (portable, sin instalar)
+
+1. Genera el AppImage:
+   ```bash
+   npm run build:appimage
+   ```
+2. Dale permiso de ejecución y ejecútalo:
+   ```bash
+   chmod +x dist/EasyCronTab-1.0.0.AppImage
+   ./dist/EasyCronTab-1.0.0.AppImage
+   ```
+3. Opcional: copia el AppImage a `~/.local/bin` o donde quieras para tenerlo en el PATH.
+
+**Build completo** (generar .deb y AppImage a la vez):
+```bash
+npm run build
+```
+Los archivos quedan en la carpeta `dist/`.
+
+---
+
+## Guía de uso (primeros pasos en la interfaz)
+
+La interfaz tiene varias pestañas/secciones. Orden recomendado:
+
+### 1. Configuración (opcional pero recomendado)
+
+- Ve a **Configuración**.
+- Pulsa **Buscar carpeta** y elige la carpeta donde tienes tus proyectos (repos con `package.json`).
+- Pulsa **Guardar**.  
+  Así podrás elegir proyectos y scripts desde **Gestionar tareas** y **PM2** sin escribir rutas a mano.
+
+### 2. Crontab (tareas programadas)
+
+- **Buscar tareas**: escribe en la barra de búsqueda (ej.: "backup", "diario", "próximas horas") para filtrar.
+- **Ver todas**: en **Tareas por próxima ejecución** ves todas las tareas ordenadas por la próxima ejecución.
+- **Añadir tarea**: en **Gestionar tareas** pulsa **Añadir tarea** (escribes comando y frecuencia) o **Añadir desde repositorio** (eliges proyecto y script de la lista, luego frecuencia).
+- **Guardar**: después de editar, pulsa **Guardar crontab** para aplicar los cambios al sistema.
+
+### 3. PM2 (procesos siempre en marcha)
+
+- Ve a la pestaña **PM2**.
+- Para **añadir un proceso** (ej. un servidor o `npm run start-all`):
+  1. Pulsa **Añadir proceso**.
+  2. Si hace falta, configura o cambia la **carpeta de repositorios** (la misma que en Configuración).
+  3. Elige un **proyecto** en el desplegable.
+  4. Elige el **script** a ejecutar (npm start, npm run start-all, etc.).
+  5. Ajusta el **nombre del proceso** si quieres y pulsa **Arrancar con PM2**.
+- Desde la lista puedes **Actualizar lista**, **Parar**, **Reiniciar** o **Eliminar** cada proceso.
 
 Los cambios en crontab reemplazan todo el crontab del usuario actual. Úsalo con cuidado en entornos delicados.
 
 ---
 
-## Configuración
+## Configuración (variables de entorno)
 
 | Variable | Descripción | Por defecto |
 |----------|-------------|-------------|
@@ -121,6 +164,7 @@ EasyCronTab/
 ├── electron-main.js    # Proceso principal Electron (app de escritorio)
 ├── lib/
 │   ├── crontab.js      # Lectura/escritura y parseo del crontab
+│   ├── pm2.js          # API PM2 (listar, arrancar, parar, etc.)
 │   └── search.js       # Búsqueda (Fuse.js + sinónimos)
 ├── views/              # Plantillas EJS
 ├── public/             # CSS y estáticos
