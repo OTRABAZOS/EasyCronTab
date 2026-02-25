@@ -1,3 +1,5 @@
+const crypto = require('crypto');
+const fs = require('fs');
 const express = require('express');
 const path = require('path');
 const config = require('./config');
@@ -6,7 +8,7 @@ const { buildSearchIndex, search } = require('./lib/search');
 const { cronToHuman, cronToFormOptions, FRECUENCIAS, DIAS_SEMANA } = require('./lib/cronSchedule');
 const { getNextRun, getRunsForDay } = require('./lib/nextRun');
 const { commandToDescription } = require('./lib/commandDescribe');
-const { getSettings, setReposPath } = require('./lib/settings');
+const { getSettings, setReposPath, getLogsPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
@@ -34,6 +36,8 @@ app.get('/', (req, res) => {
     const humanSchedule = cronToHuman(t.schedule);
     const humanCommand = commandToDescription(t.command);
     const { nextRun, nextRunMs } = getNextRun(t.schedule);
+    const logPath = getLogPath(t.schedule, t.command);
+    const logStatus = getLogStatus(logPath);
     return {
       schedule: t.schedule,
       command: t.command,
@@ -42,7 +46,9 @@ app.get('/', (req, res) => {
       humanCommand,
       formOptions: cronToFormOptions(t.schedule),
       nextRun: nextRun || null,
-      nextRunMs: nextRunMs != null ? nextRunMs : null
+      nextRunMs: nextRunMs != null ? nextRunMs : null,
+      logStatus,
+      logPath
     };
   });
   const settings = getSettings();
@@ -68,6 +74,8 @@ app.get('/api/jobs', (req, res) => {
   const tasks = parseCrontabLines(result.content);
   const jobs = tasks.map(t => {
     const { nextRun, nextRunMs } = getNextRun(t.schedule);
+    const logPath = getLogPath(t.schedule, t.command);
+    const logStatus = getLogStatus(logPath);
     return {
       schedule: t.schedule,
       command: t.command,
@@ -75,10 +83,32 @@ app.get('/api/jobs', (req, res) => {
       humanCommand: commandToDescription(t.command),
       formOptions: cronToFormOptions(t.schedule),
       nextRun: nextRun || null,
-      nextRunMs: nextRunMs != null ? nextRunMs : null
+      nextRunMs: nextRunMs != null ? nextRunMs : null,
+      logStatus,
+      logPath
     };
   });
   res.json({ ok: true, jobs });
+});
+
+// API jobs: contenido del log de una tarea (body: schedule, command)
+app.post('/api/jobs/log', (req, res) => {
+  const { schedule, command } = req.body || {};
+  if (!schedule || !command) {
+    return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
+  }
+  const logPath = getLogPath(schedule, command);
+  try {
+    if (!fs.existsSync(logPath)) {
+      return res.json({ ok: true, content: '(El archivo de log aún no existe o la tarea no se ha ejecutado.)', path: logPath });
+    }
+    const content = fs.readFileSync(logPath, 'utf8');
+    const maxLen = 300 * 1024;
+    const out = content.length > maxLen ? content.slice(-maxLen) : content;
+    res.json({ ok: true, content: out, path: logPath, truncated: content.length > maxLen });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
 });
 
 // API jobs: vista día — ejecuciones por franjas de 15 min para una fecha
@@ -131,12 +161,63 @@ app.get('/api/jobs/day', (req, res) => {
   res.json({ ok: true, date: dateStr, slots });
 });
 
+// Comando sin redirección a log (para calcular el mismo hash al guardar y al leer)
+function getRawCommandForLog(command) {
+  const cmd = (command || '').trim();
+  return cmd.replace(/\s*>>\s*[^\s]+\s+2>&1\s*$/, '').trim() || cmd;
+}
+
+function getLogPath(schedule, command) {
+  const rawCmd = getRawCommandForLog(command || '');
+  const hash = crypto.createHash('md5').update((schedule || '') + '\n' + rawCmd).digest('hex').slice(0, 12);
+  return path.join(getLogsPath(), hash + '.log');
+}
+
+function getLogStatus(logPath) {
+  try {
+    if (!fs.existsSync(logPath)) return 'unknown';
+    const stat = fs.statSync(logPath);
+    if (stat.size === 0) return 'unknown';
+    const buf = Buffer.alloc(Math.min(stat.size, 4096));
+    const fd = fs.openSync(logPath, 'r');
+    fs.readSync(fd, buf, 0, buf.length, stat.size - buf.length);
+    fs.closeSync(fd);
+    const tail = buf.toString('utf8');
+    if (/error|failed|exception|fail\s|EADDRINUSE|ECONNREFUSED|ENOENT|exit\s+code\s+[1-9]|SyntaxError|ReferenceError/i.test(tail)) return 'failed';
+    return 'ok';
+  } catch (e) {
+    return 'unknown';
+  }
+}
+
+// Añade redirección a log (>> ... 2>&1) si el comando no la tiene
+function ensureLogRedirection(command, schedule, logDir) {
+  const cmd = (command || '').trim();
+  if (!cmd) return cmd;
+  if (/2>&1\s*$/.test(cmd)) return cmd;
+  const rawCmd = getRawCommandForLog(cmd);
+  const hash = crypto.createHash('md5').update((schedule || '') + '\n' + rawCmd).digest('hex').slice(0, 12);
+  const logFile = path.join(logDir, hash + '.log');
+  return cmd + ' >> ' + logFile + ' 2>&1';
+}
+
 // API jobs: guardar (reemplaza todo el crontab con la lista enviada)
 app.post('/api/jobs', (req, res) => {
   const jobs = Array.isArray(req.body.jobs) ? req.body.jobs : [];
+  const logDir = getLogsPath();
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'No se pudo crear la carpeta de logs: ' + (e.message || e.code) });
+  }
   const lines = jobs
     .filter(j => j && (j.schedule || j.command))
-    .map(j => (j.schedule ? j.schedule.trim() + ' ' + (j.command || '').trim() : (j.command || '').trim()).trim())
+    .map(j => {
+      const schedule = (j.schedule || '').trim();
+      const rawCommand = (j.command || '').trim();
+      const command = ensureLogRedirection(rawCommand, schedule, logDir);
+      return schedule ? schedule + ' ' + command : command;
+    })
     .filter(Boolean);
   const content = lines.join('\n') + (lines.length ? '\n' : '');
   const result = writeCrontab(content);
@@ -244,6 +325,39 @@ app.post('/api/pm2/save', (req, res) => {
   pm2.save()
     .then(() => res.json({ ok: true }))
     .catch(err => res.status(500).json({ ok: false, error: err.message || String(err) }));
+});
+
+// API PM2: contenido del log de un proceso (body: name). Lee ~/.pm2/logs/<name>-out.log y -error.log
+app.post('/api/pm2/log', (req, res) => {
+  const name = (req.body && req.body.name) ? String(req.body.name).trim() : '';
+  if (!name || /[^a-zA-Z0-9_.-]/.test(name)) {
+    return res.status(400).json({ ok: false, error: 'Nombre de proceso no válido' });
+  }
+  const home = process.env.HOME || process.env.USERPROFILE || '/tmp';
+  const logDir = path.join(home, '.pm2', 'logs');
+  const basePath = path.join(logDir, name);
+  const outPath = basePath + '-out.log';
+  const errPath = basePath + '-error.log';
+  const maxLen = 200 * 1024; // 200 KB por archivo
+  try {
+    let out = '';
+    let err = '';
+    if (fs.existsSync(outPath)) {
+      const c = fs.readFileSync(outPath, 'utf8');
+      out = c.length > maxLen ? c.slice(-maxLen) : c;
+    }
+    if (fs.existsSync(errPath)) {
+      const c = fs.readFileSync(errPath, 'utf8');
+      err = c.length > maxLen ? c.slice(-maxLen) : c;
+    }
+    const parts = [];
+    if (out) parts.push('=== stdout ===\n' + out);
+    if (err) parts.push('=== stderr ===\n' + err);
+    const content = parts.length ? parts.join('\n\n') : '(No hay logs aún para este proceso.)';
+    res.json({ ok: true, content, path: logDir });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
 });
 
 // API búsqueda: devuelve tareas que coinciden con la consulta
