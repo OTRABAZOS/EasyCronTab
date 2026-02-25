@@ -568,6 +568,7 @@
         }
         showFrequencyRows();
         panel.style.display = 'block';
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
       function closeForm() {
