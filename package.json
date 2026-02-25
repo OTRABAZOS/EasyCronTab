@@ -10,7 +10,8 @@
     "build": "electron-builder --linux",
     "build:deb": "electron-builder --linux deb",
     "build:appimage": "electron-builder --linux AppImage",
-    "prebuild": "node scripts/build-linux-icons.js"
+    "prebuild": "node scripts/build-linux-icons.js",
+    "check:scripts": "node scripts/check-script-permissions.js"
   },
   "dependencies": {
     "cron-parser": "^5.5.0",

@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const express = require('express');
 const path = require('path');
 const config = require('./config');
@@ -102,13 +103,53 @@ app.post('/api/jobs/log', (req, res) => {
     if (!fs.existsSync(logPath)) {
       return res.json({ ok: true, content: '(El archivo de log aún no existe o la tarea no se ha ejecutado.)', path: logPath });
     }
+    const stat = fs.statSync(logPath);
     const content = fs.readFileSync(logPath, 'utf8');
     const maxLen = 300 * 1024;
     const out = content.length > maxLen ? content.slice(-maxLen) : content;
-    res.json({ ok: true, content: out, path: logPath, truncated: content.length > maxLen });
+    res.json({
+      ok: true,
+      content: out,
+      path: logPath,
+      truncated: content.length > maxLen,
+      logUpdatedAt: stat.mtime ? stat.mtime.getTime() : null
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message || String(e) });
   }
+});
+
+// API jobs: forzar ejecución ahora (body: schedule, command). Ejecuta en segundo plano y escribe en el mismo log.
+app.post('/api/jobs/run-now', (req, res) => {
+  const { schedule, command } = req.body || {};
+  if (!schedule || !command) {
+    return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
+  }
+  const result = readCrontab();
+  if (!result.ok) {
+    return res.status(500).json({ ok: false, error: result.error });
+  }
+  const tasks = parseCrontabLines(result.content);
+  const rawCmd = getRawCommandForLog(command);
+  const exists = tasks.some(t => (t.schedule || '').trim() === (schedule || '').trim() && getRawCommandForLog(t.command) === rawCmd);
+  if (!exists) {
+    return res.status(400).json({ ok: false, error: 'La tarea no está en el crontab actual' });
+  }
+  const logDir = getLogsPath();
+  const fullCommand = rawCmd + ' >> ' + getLogPath(schedule, command) + ' 2>&1';
+  try {
+    fs.mkdirSync(logDir, { recursive: true });
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'No se pudo crear la carpeta de logs: ' + (e.message || String(e)) });
+  }
+  try {
+    const env = { ...process.env };
+    if (!env.DISPLAY) env.DISPLAY = ':0';
+    spawn('sh', ['-c', fullCommand], { detached: true, stdio: 'ignore', env }).unref();
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: e.message || String(e) });
+  }
+  res.json({ ok: true, message: 'Ejecución lanzada. Abre "Ver log" en unos segundos para ver la salida.' });
 });
 
 // API jobs: vista día — ejecuciones por franjas de 15 min para una fecha

@@ -14,8 +14,8 @@
     <h1>🕒 EasyCronTab</h1>
     <nav id="main-nav">
       <a href="#inicio" class="nav-link" data-view="inicio">Inicio</a>
-      <a href="#schedule" class="nav-link" data-view="schedule">Ejecuciones</a>
-      <a href="#vista-dia" class="nav-link" data-view="vista-dia">Concurrencia</a>
+      <a href="#schedule" class="nav-link" data-view="schedule">Lanzamientos</a>
+      <a href="#vista-dia" class="nav-link" data-view="vista-dia">Calendario</a>
       <a href="#tareas" class="nav-link" data-view="tareas">Tareas</a>
       <a href="#pm2" class="nav-link" data-view="pm2">PM2</a>
       <a href="#config" class="nav-link" data-view="config">Configuración</a>
@@ -46,15 +46,15 @@
 
     <!-- Schedule: todas las tareas ordenadas por próxima ejecución -->
     <section class="schedule-section card-section content-section" id="schedule">
-      <h2><span class="section-emoji" aria-hidden="true">📅</span> Tareas por próxima ejecución</h2>
+      <h2><span class="section-emoji" aria-hidden="true">📅</span> Lanzamientos</h2>
       <p class="intro">Todas las tareas ordenadas por la próxima vez que se ejecutarán. Puedes editar o eliminar desde aquí o desde la búsqueda.</p>
       <ul class="jobs-list" id="schedule-list"></ul>
       <p class="no-jobs" id="no-jobs">No hay tareas. Añade una con el botón de abajo.</p>
     </section>
 
-    <!-- Concurrencia: calendario del día con horarios y coincidencias -->
+    <!-- Calendario: vista del día con horarios y coincidencias -->
     <section class="card-section content-section" id="vista-dia">
-      <h2><span class="section-emoji" aria-hidden="true">🕐</span> Concurrencia</h2>
+      <h2><span class="section-emoji" aria-hidden="true">🕐</span> Calendario</h2>
       <p class="intro">Ejecuciones programadas para un día. Las franjas con más de una tarea a la vez se resaltan para que veas posibles coincidencias.</p>
       <div class="day-view-controls">
         <label for="day-view-date">Fecha:</label>
@@ -78,6 +78,10 @@
         <button type="button" class="btn btn-primary" id="btn-save-crontab" title="Escribir los cambios en el crontab del sistema">Guardar</button>
         <span id="save-status" class="status"></span>
       </div>
+
+      <h3 class="tasks-list-heading" style="margin-top: 1.25rem; margin-bottom: 0.5rem;">Todas las tareas</h3>
+      <ul class="jobs-list" id="tareas-list"></ul>
+      <p class="no-jobs" id="no-jobs-tareas" style="display: none;">No hay tareas. Añade una con el botón de arriba.</p>
 
       <div class="how-to-repos" aria-label="Cómo programar tareas con tus repos">
         <p><strong>¿Cómo uso la carpeta de repos para programar tareas?</strong></p>
@@ -281,6 +285,7 @@
   <div class="log-modal-overlay" id="log-modal-overlay" style="display: none;" aria-hidden="true">
     <div class="log-modal" id="log-modal" role="dialog" aria-labelledby="log-modal-title">
       <h3 id="log-modal-title"><span class="section-emoji" aria-hidden="true">📄</span> Log de ejecución</h3>
+      <p id="log-modal-mtime" class="log-modal-mtime" aria-live="polite"></p>
       <pre id="log-modal-content" class="log-modal-content"></pre>
       <div class="log-modal-actions">
         <button type="button" class="btn btn-small btn-edit" id="log-modal-close">Cerrar</button>
@@ -366,6 +371,33 @@
         return div.innerHTML;
       }
 
+      function formatLogMtime(ms) {
+        if (!ms) return '';
+        var d = new Date(ms);
+        var now = Date.now();
+        var diff = now - ms;
+        if (diff < 60000) return 'Última escritura: hace un momento (posiblemente en ejecución)';
+        if (diff < 3600000) return 'Última escritura: hace ' + Math.floor(diff / 60000) + ' min';
+        if (diff < 86400000) return 'Última escritura: hace ' + Math.floor(diff / 3600000) + ' h';
+        var day = ('0' + d.getDate()).slice(-2);
+        var month = ('0' + (d.getMonth() + 1)).slice(-2);
+        var hour = ('0' + d.getHours()).slice(-2);
+        var min = ('0' + d.getMinutes()).slice(-2);
+        return 'Última escritura: ' + day + '/' + month + '/' + d.getFullYear() + ', ' + hour + ':' + min;
+      }
+
+      function setLogModalMtime(data) {
+        var mtimeEl = document.getElementById('log-modal-mtime');
+        if (!mtimeEl) return;
+        if (data && data.ok && data.logUpdatedAt != null) {
+          mtimeEl.style.display = 'block';
+          mtimeEl.textContent = formatLogMtime(data.logUpdatedAt);
+        } else {
+          mtimeEl.style.display = 'none';
+          mtimeEl.textContent = '';
+        }
+      }
+
       function findJobIndex(schedule, command) {
         for (var i = 0; i < jobs.length; i++) {
           if (jobs[i].schedule === schedule && jobs[i].command === command) return i;
@@ -390,67 +422,106 @@
         html += '<div class="job-command">' + escapeHtml(job.command) + '</div>';
         var logStatus = job.logStatus || 'unknown';
         var logLabel = logStatus === 'ok' ? 'OK' : (logStatus === 'failed' ? 'Error' : 'Sin log');
-        html += '<div class="job-log-row"><span class="job-log-status job-log-status--' + logStatus + '" title="Estado de la última ejecución">' + escapeHtml(logLabel) + '</span> <button type="button" class="btn-small btn-edit job-log-view" data-index="' + index + '" title="Ver log de ejecución">Ver log</button></div></div>' +
+        html += '<div class="job-log-row"><span class="job-log-status job-log-status--' + logStatus + '" title="Estado de la última ejecución">' + escapeHtml(logLabel) + '</span> <button type="button" class="btn-small btn-edit job-log-view" data-index="' + index + '" title="Ver log de ejecución">Log</button> <button type="button" class="btn-small btn-primary job-run-now" data-index="' + index + '" title="Ejecutar esta tarea ahora (la salida se guardará en el log)">Ejecuta</button></div></div>' +
           '<div class="job-actions">' +
-          '<button type="button" class="btn-small btn-edit" data-index="' + index + '" data-action="edit">Editar</button>' +
-          '<button type="button" class="btn-small btn-delete" data-index="' + index + '" data-action="delete">Eliminar</button>' +
+          '<button type="button" class="btn-small btn-edit" data-index="' + index + '" data-action="edit">Edita</button>' +
+          '<button type="button" class="btn-small btn-delete" data-index="' + index + '" data-action="delete">Elimina</button>' +
           '</div>';
         return html;
       }
 
       function renderScheduleList() {
         var list = document.getElementById('schedule-list');
+        var listTareas = document.getElementById('tareas-list');
         var noJobs = document.getElementById('no-jobs');
+        var noJobsTareas = document.getElementById('no-jobs-tareas');
         list.innerHTML = '';
+        if (listTareas) listTareas.innerHTML = '';
         if (jobs.length === 0) {
-          noJobs.style.display = 'block';
+          if (noJobs) noJobs.style.display = 'block';
+          if (noJobsTareas) noJobsTareas.style.display = 'block';
           return;
         }
-        noJobs.style.display = 'none';
+        if (noJobs) noJobs.style.display = 'none';
+        if (noJobsTareas) noJobsTareas.style.display = 'none';
         var sorted = jobs.slice().sort(function (a, b) {
           var ma = a.nextRunMs != null ? a.nextRunMs : 99999999999999;
           var mb = b.nextRunMs != null ? b.nextRunMs : 99999999999999;
           return ma - mb;
         });
-        sorted.forEach(function (job) {
-          var idx = findJobIndex(job.schedule, job.command);
-          if (idx < 0) return;
-          var li = document.createElement('li');
-          li.className = 'job-card';
-          li.innerHTML = makeJobCard(job, idx);
-          list.appendChild(li);
-        });
-        list.querySelectorAll('[data-action="edit"]').forEach(function (btn) {
-          btn.addEventListener('click', function () { openForm(parseInt(btn.getAttribute('data-index'), 10)); });
-        });
-        list.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var i = parseInt(btn.getAttribute('data-index'), 10);
-            jobs.splice(i, 1);
-            renderScheduleList();
-            if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
+        function appendCardTo(container) {
+          sorted.forEach(function (job) {
+            var idx = findJobIndex(job.schedule, job.command);
+            if (idx < 0) return;
+            var li = document.createElement('li');
+            li.className = 'job-card';
+            li.innerHTML = makeJobCard(job, idx);
+            container.appendChild(li);
           });
-        });
-        list.querySelectorAll('.job-log-view').forEach(function (btn) {
-          btn.addEventListener('click', function () {
-            var i = parseInt(btn.getAttribute('data-index'), 10);
-            if (i < 0 || !jobs[i]) return;
-            var job = jobs[i];
-            document.getElementById('log-modal-title').textContent = '\uD83D\uDCC4 Log de ejecución';
-            document.getElementById('log-modal-content').textContent = 'Cargando...';
-            document.getElementById('log-modal-overlay').style.display = 'block';
-            document.getElementById('log-modal-overlay').setAttribute('aria-hidden', 'false');
-            fetch('/api/jobs/log', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ schedule: job.schedule, command: job.command })
-            }).then(function (r) { return r.json(); }).then(function (data) {
-              document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
-            }).catch(function (err) {
-              document.getElementById('log-modal-content').textContent = 'Error de red: ' + (err.message || 'desconocido');
+        }
+        appendCardTo(list);
+        if (listTareas) appendCardTo(listTareas);
+        function bindListeners(container) {
+          if (!container) return;
+          container.querySelectorAll('[data-action="edit"]').forEach(function (btn) {
+            btn.addEventListener('click', function () { openForm(parseInt(btn.getAttribute('data-index'), 10)); });
+          });
+          container.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var i = parseInt(btn.getAttribute('data-index'), 10);
+              jobs.splice(i, 1);
+              renderScheduleList();
+              if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
             });
           });
-        });
+          container.querySelectorAll('.job-log-view').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var i = parseInt(btn.getAttribute('data-index'), 10);
+              if (i < 0 || !jobs[i]) return;
+              var job = jobs[i];
+              document.getElementById('log-modal-title').textContent = '\uD83D\uDCC4 Log de ejecución';
+              document.getElementById('log-modal-content').textContent = 'Cargando...';
+              setLogModalMtime(null);
+              document.getElementById('log-modal-overlay').style.display = 'block';
+              document.getElementById('log-modal-overlay').setAttribute('aria-hidden', 'false');
+              fetch('/api/jobs/log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule: job.schedule, command: job.command })
+              }).then(function (r) { return r.json(); }).then(function (data) {
+                document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
+                setLogModalMtime(data);
+              }).catch(function (err) {
+                document.getElementById('log-modal-content').textContent = 'Error de red: ' + (err.message || 'desconocido');
+                setLogModalMtime(null);
+              });
+            });
+          });
+          container.querySelectorAll('.job-run-now').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+              var i = parseInt(btn.getAttribute('data-index'), 10);
+              if (i < 0 || !jobs[i]) return;
+              var job = jobs[i];
+              btn.disabled = true;
+              btn.textContent = 'Lanzando...';
+              fetch('/api/jobs/run-now', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ schedule: job.schedule, command: job.command })
+              }).then(function (r) { return r.json(); }).then(function (data) {
+                btn.disabled = false;
+                btn.textContent = 'Ejecuta';
+                alert(data.ok ? (data.message || 'Ejecución lanzada. Abre "Log" en unos segundos.') : (data.error || 'Error'));
+              }).catch(function (err) {
+                btn.disabled = false;
+                btn.textContent = 'Ejecuta';
+                alert('Error de red: ' + (err.message || 'desconocido'));
+              });
+            });
+          });
+        }
+        bindListeners(list);
+        bindListeners(listTareas);
       }
 
       function showFrequencyRows() {
@@ -820,10 +891,10 @@
             (proc.cwd ? '<div class="job-command">' + escapeHtml(proc.cwd) + '</div>' : '') +
             '</div>' +
             '<div class="job-actions">' +
-            '<button type="button" class="btn-small btn-edit pm2-log-view" data-name="' + escapeHtml(proc.name) + '" title="Ver log de PM2">Ver log</button>' +
+            '<button type="button" class="btn-small btn-edit pm2-log-view" data-name="' + escapeHtml(proc.name) + '" title="Ver log de PM2">Log</button>' +
             '<button type="button" class="btn-small btn-edit pm2-stop" data-name="' + escapeHtml(proc.name) + '">Parar</button>' +
             '<button type="button" class="btn-small btn-edit pm2-restart" data-name="' + escapeHtml(proc.name) + '">Reiniciar</button>' +
-            '<button type="button" class="btn-small btn-delete pm2-delete" data-name="' + escapeHtml(proc.name) + '">Eliminar</button>' +
+            '<button type="button" class="btn-small btn-delete pm2-delete" data-name="' + escapeHtml(proc.name) + '">Elimina</button>' +
             '</div>';
           li.innerHTML = html;
           listEl.appendChild(li);
@@ -834,6 +905,7 @@
             if (!name) return;
             document.getElementById('log-modal-title').textContent = '\uD83D\uDCC4 Log PM2: ' + name;
             document.getElementById('log-modal-content').textContent = 'Cargando...';
+            setLogModalMtime(null);
             document.getElementById('log-modal-overlay').style.display = 'block';
             document.getElementById('log-modal-overlay').setAttribute('aria-hidden', 'false');
             fetch('/api/pm2/log', {
@@ -1155,6 +1227,7 @@
             var job = jobs[i];
             document.getElementById('log-modal-title').textContent = '\uD83D\uDCC4 Log de ejecución';
             document.getElementById('log-modal-content').textContent = 'Cargando...';
+            setLogModalMtime(null);
             document.getElementById('log-modal-overlay').style.display = 'block';
             document.getElementById('log-modal-overlay').setAttribute('aria-hidden', 'false');
             fetch('/api/jobs/log', {
@@ -1163,8 +1236,32 @@
               body: JSON.stringify({ schedule: job.schedule, command: job.command })
             }).then(function (r) { return r.json(); }).then(function (data) {
               document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
+              setLogModalMtime(data);
             }).catch(function (err) {
               document.getElementById('log-modal-content').textContent = 'Error de red: ' + (err.message || 'desconocido');
+              setLogModalMtime(null);
+            });
+          });
+        });
+        searchResults.querySelectorAll('.job-run-now').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var i = parseInt(btn.getAttribute('data-index'), 10);
+            if (i < 0 || !jobs[i]) return;
+            var job = jobs[i];
+            btn.disabled = true;
+            btn.textContent = 'Lanzando...';
+            fetch('/api/jobs/run-now', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ schedule: job.schedule, command: job.command })
+            }).then(function (r) { return r.json(); }).then(function (data) {
+              btn.disabled = false;
+              btn.textContent = 'Ejecuta';
+              alert(data.ok ? (data.message || 'Ejecución lanzada. Abre "Log" en unos segundos.') : (data.error || 'Error'));
+            }).catch(function (err) {
+              btn.disabled = false;
+              btn.textContent = 'Ejecuta';
+              alert('Error de red: ' + (err.message || 'desconocido'));
             });
           });
         });
@@ -1211,7 +1308,7 @@
 
       renderScheduleList();
 
-      // Concurrencia: cargar ejecuciones del día seleccionado
+      // Calendario: cargar ejecuciones del día seleccionado
       var dayViewDate = document.getElementById('day-view-date');
       var dayViewTimeline = document.getElementById('day-view-timeline');
       var dayViewStatus = document.getElementById('day-view-status');
@@ -1260,9 +1357,10 @@
                 if (canEdit) {
                   html += '<span class="day-view-job-actions">';
                   html += '<span class="job-log-status job-log-status--' + logStatus + '" title="Estado">' + escapeHtml(logLabel) + '</span>';
-                  html += '<button type="button" class="btn-small btn-edit day-view-job-log-view" data-job-index="' + idx + '" title="Ver log">Ver log</button> ';
-                  html += '<button type="button" class="btn-small btn-edit day-view-job-edit" data-job-index="' + idx + '" title="Editar tarea">Editar</button> ';
-                  html += '<button type="button" class="btn-small btn-delete day-view-job-delete" data-job-index="' + idx + '" title="Eliminar tarea">Eliminar</button>';
+                  html += '<button type="button" class="btn-small btn-edit day-view-job-log-view" data-job-index="' + idx + '" title="Ver log">Log</button> ';
+                  html += '<button type="button" class="btn-small btn-primary day-view-job-run-now" data-job-index="' + idx + '" title="Ejecutar ahora">Ejecuta</button> ';
+                  html += '<button type="button" class="btn-small btn-edit day-view-job-edit" data-job-index="' + idx + '" title="Editar tarea">Edita</button> ';
+                  html += '<button type="button" class="btn-small btn-delete day-view-job-delete" data-job-index="' + idx + '" title="Eliminar tarea">Elimina</button>';
                   html += '</span>';
                 }
                 html += '</li>';
@@ -1301,6 +1399,7 @@
                   var job = jobs[i];
                   document.getElementById('log-modal-title').textContent = '\uD83D\uDCC4 Log de ejecución';
                   document.getElementById('log-modal-content').textContent = 'Cargando...';
+                  setLogModalMtime(null);
                   document.getElementById('log-modal-overlay').style.display = 'block';
                   document.getElementById('log-modal-overlay').setAttribute('aria-hidden', 'false');
                   fetch('/api/jobs/log', {
@@ -1309,8 +1408,33 @@
                     body: JSON.stringify({ schedule: job.schedule, command: job.command })
                   }).then(function (r) { return r.json(); }).then(function (data) {
                     document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
+                    setLogModalMtime(data);
                   }).catch(function (err) {
                     document.getElementById('log-modal-content').textContent = 'Error de red: ' + (err.message || 'desconocido');
+                    setLogModalMtime(null);
+                  });
+                });
+              });
+              dayViewTimeline.querySelectorAll('.day-view-job-run-now').forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                  e.stopPropagation();
+                  var i = parseInt(btn.getAttribute('data-job-index'), 10);
+                  if (i < 0 || !jobs[i]) return;
+                  var job = jobs[i];
+                  btn.disabled = true;
+                  btn.textContent = 'Lanzando...';
+                  fetch('/api/jobs/run-now', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ schedule: job.schedule, command: job.command })
+                  }).then(function (r) { return r.json(); }).then(function (data) {
+                    btn.disabled = false;
+                    btn.textContent = 'Ejecuta';
+                    alert(data.ok ? (data.message || 'Ejecución lanzada. Abre "Log" en unos segundos.') : (data.error || 'Error'));
+                  }).catch(function (err) {
+                    btn.disabled = false;
+                    btn.textContent = 'Ejecuta';
+                    alert('Error de red: ' + (err.message || 'desconocido'));
                   });
                 });
               });

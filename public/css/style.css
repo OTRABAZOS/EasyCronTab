@@ -318,7 +318,8 @@ body {
 
 .day-view-slots {
   list-style: none;
-  max-height: 420px;
+  min-height: 320px;
+  max-height: 75vh;
   overflow-y: auto;
 }
 
@@ -954,6 +955,17 @@ body {
   margin: 0 0 0.5rem 0;
   font-size: 1.2rem;
   flex-shrink: 0;
+}
+
+.log-modal-mtime {
+  margin: 0 0 0.35rem 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.log-modal-mtime:empty {
+  display: none;
 }
 
 .log-modal-content {
