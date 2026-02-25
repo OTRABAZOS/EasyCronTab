@@ -328,6 +328,7 @@ app.post('/api/pm2/save', (req, res) => {
 });
 
 // API PM2: contenido del log de un proceso (body: name). Lee ~/.pm2/logs/<name>-out.log y -error.log
+// PM2 guarda los logs con el nombre normalizado (guiones bajos → guiones), p. ej. mochi-chatbot-trawlingweb-wikibot-out.log
 app.post('/api/pm2/log', (req, res) => {
   const name = (req.body && req.body.name) ? String(req.body.name).trim() : '';
   if (!name || /[^a-zA-Z0-9_.-]/.test(name)) {
@@ -335,7 +336,8 @@ app.post('/api/pm2/log', (req, res) => {
   }
   const home = process.env.HOME || process.env.USERPROFILE || '/tmp';
   const logDir = path.join(home, '.pm2', 'logs');
-  const basePath = path.join(logDir, name);
+  const logName = name.replace(/_/g, '-'); // mismo criterio que PM2 para el nombre del archivo
+  const basePath = path.join(logDir, logName);
   const outPath = basePath + '-out.log';
   const errPath = basePath + '-error.log';
   const maxLen = 200 * 1024; // 200 KB por archivo
