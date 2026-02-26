@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, Menu } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -38,6 +38,8 @@ function createWindow(port) {
   _log('electron-main.js:createWindow', 'loadURL', { url, port }, 'E');
   // #endregion
   mainWindow.loadURL(url);
+  // Sin menú nativo (File, Edit, View, etc.)
+  Menu.setApplicationMenu(null);
   // Atajo Ctrl+Shift+I para abrir/cerrar DevTools (inspeccionar)
   mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.control && input.shift && input.key.toLowerCase() === 'i') {
