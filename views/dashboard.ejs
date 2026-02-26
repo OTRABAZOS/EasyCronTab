@@ -179,6 +179,13 @@
             <label for="job-command">Comando a ejecutar *</label>
             <textarea id="job-command" name="command" placeholder="/ruta/al/script.sh o: cd /ruta && ./script.sh" required></textarea>
           </div>
+          <div class="form-row">
+            <label class="checkbox-label">
+              <input type="checkbox" id="job-use-xvfb" name="useXvfb" value="1">
+              <span>Ejecutar con display virtual (<code>xvfb-run</code>)</span>
+            </label>
+            <p class="form-hint">Actívalo si la tarea usa un navegador con ventana (Playwright, Puppeteer) y se ejecuta por cron sin escritorio gráfico.</p>
+          </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Guardar tarea</button>
             <button type="button" class="btn btn-small btn-edit" id="btn-cancel-form">Cancelar</button>
@@ -398,9 +405,9 @@
         }
       }
 
-      function findJobIndex(schedule, command) {
+      function findJobIndex(schedule, command, useXvfb) {
         for (var i = 0; i < jobs.length; i++) {
-          if (jobs[i].schedule === schedule && jobs[i].command === command) return i;
+          if (jobs[i].schedule === schedule && jobs[i].command === command && !!jobs[i].useXvfb === !!useXvfb) return i;
         }
         return -1;
       }
@@ -451,7 +458,7 @@
         });
         function appendCardTo(container) {
           sorted.forEach(function (job) {
-            var idx = findJobIndex(job.schedule, job.command);
+            var idx = findJobIndex(job.schedule, job.command, job.useXvfb);
             if (idx < 0) return;
             var li = document.createElement('li');
             li.className = 'job-card';
@@ -487,7 +494,7 @@
               fetch('/api/jobs/log', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule: job.schedule, command: job.command })
+                body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
               }).then(function (r) { return r.json(); }).then(function (data) {
                 document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
                 setLogModalMtime(data);
@@ -507,7 +514,7 @@
               fetch('/api/jobs/run-now', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ schedule: job.schedule, command: job.command })
+                body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
               }).then(function (r) { return r.json(); }).then(function (data) {
                 btn.disabled = false;
                 btn.textContent = 'Ejecuta';
@@ -554,6 +561,7 @@
           document.getElementById('job-day-of-month').value = opt.dayOfMonth !== undefined ? opt.dayOfMonth : 1;
           document.getElementById('job-custom-expression').value = opt.customExpression || '';
           document.getElementById('job-command').value = j.command || '';
+          document.getElementById('job-use-xvfb').checked = !!j.useXvfb;
         } else {
           document.getElementById('job-frequency').value = 'daily';
           document.getElementById('job-minute-interval').value = 5;
@@ -565,6 +573,7 @@
           document.getElementById('job-day-of-month').value = 1;
           document.getElementById('job-custom-expression').value = '';
           document.getElementById('job-command').value = '';
+          document.getElementById('job-use-xvfb').checked = false;
         }
         showFrequencyRows();
         panel.style.display = 'block';
@@ -607,7 +616,8 @@
         };
         var humanSchedule = humanLabels[opts.frequency] || schedule;
         var index = parseInt(document.getElementById('job-edit-index').value, 10);
-        var newJob = { schedule: schedule, command: command, humanSchedule: humanSchedule, formOptions: opts };
+        var useXvfb = document.getElementById('job-use-xvfb').checked;
+        var newJob = { schedule: schedule, command: command, humanSchedule: humanSchedule, formOptions: opts, useXvfb: !!useXvfb };
         if (index >= 0 && index < jobs.length) {
           jobs[index] = newJob;
         } else {
@@ -1161,7 +1171,7 @@
         fetch('/api/jobs', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobs: jobs.map(function (j) { return { schedule: j.schedule, command: j.command }; }) })
+          body: JSON.stringify({ jobs: jobs.map(function (j) { return { schedule: j.schedule, command: j.command, useXvfb: !!j.useXvfb }; }) })
         })
           .then(function (r) { return r.json(); })
           .then(function (data) {
@@ -1203,7 +1213,7 @@
         if (scheduleSection) scheduleSection.style.display = 'none';
         var html = '<p class="search-result-count">' + results.length + ' resultado' + (results.length !== 1 ? 's' : '') + '.</p><ul class="search-results-list">';
         results.forEach(function (r) {
-          var idx = findJobIndex(r.schedule, r.command);
+          var idx = findJobIndex(r.schedule, r.command, r.useXvfb);
           if (idx < 0) return;
           var job = jobs[idx];
           html += '<li class="job-card">' + makeJobCard(job, idx) + '</li>';
@@ -1218,7 +1228,7 @@
             var i = parseInt(btn.getAttribute('data-index'), 10);
             jobs.splice(i, 1);
             renderScheduleList();
-            renderSearchResultsFromData(lastSearchResults.filter(function (r) { return findJobIndex(r.schedule, r.command) >= 0; }));
+            renderSearchResultsFromData(lastSearchResults.filter(function (r) { return findJobIndex(r.schedule, r.command, r.useXvfb) >= 0; }));
           });
         });
         searchResults.querySelectorAll('.job-log-view').forEach(function (btn) {
@@ -1234,7 +1244,7 @@
             fetch('/api/jobs/log', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ schedule: job.schedule, command: job.command })
+              body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
             }).then(function (r) { return r.json(); }).then(function (data) {
               document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
               setLogModalMtime(data);
@@ -1254,7 +1264,7 @@
             fetch('/api/jobs/run-now', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ schedule: job.schedule, command: job.command })
+              body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
             }).then(function (r) { return r.json(); }).then(function (data) {
               btn.disabled = false;
               btn.textContent = 'Ejecuta';
@@ -1348,7 +1358,7 @@
               html += '<div class="day-view-slot-time">' + escapeHtml(slot.time) + '</div>';
               html += '<ul class="day-view-slot-jobs">';
               slot.jobs.forEach(function (job) {
-                var idx = findJobIndex(job.schedule, job.command);
+                var idx = findJobIndex(job.schedule, job.command, job.useXvfb);
                 var canEdit = idx >= 0;
                 var logStatus = (idx >= 0 && jobs[idx]) ? (jobs[idx].logStatus || 'unknown') : 'unknown';
                 var logLabel = logStatus === 'ok' ? 'OK' : (logStatus === 'failed' ? 'Error' : 'Sin log');
@@ -1406,7 +1416,7 @@
                   fetch('/api/jobs/log', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ schedule: job.schedule, command: job.command })
+                    body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
                   }).then(function (r) { return r.json(); }).then(function (data) {
                     document.getElementById('log-modal-content').textContent = data.ok ? data.content : (data.error || 'Error al cargar');
                     setLogModalMtime(data);
@@ -1427,7 +1437,7 @@
                   fetch('/api/jobs/run-now', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ schedule: job.schedule, command: job.command })
+                    body: JSON.stringify({ schedule: job.schedule, command: job.command, useXvfb: !!job.useXvfb })
                   }).then(function (r) { return r.json(); }).then(function (data) {
                     btn.disabled = false;
                     btn.textContent = 'Ejecuta';

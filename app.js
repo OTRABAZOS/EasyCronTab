@@ -13,6 +13,7 @@ const { getSettings, setReposPath, getLogsPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
+const { wrapXvfb, parseXvfbCommand } = require('./lib/xvfb');
 
 const pkg = require('./package.json');
 const appVersion = pkg.version || '0.0.0';
@@ -29,28 +30,34 @@ app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Normaliza tarea del crontab a job con comando "raw" y flag useXvfb
+function taskToJob(t) {
+  const effectiveCommand = getRawCommandForLog(t.command);
+  const { rawCommand, useXvfb } = parseXvfbCommand(effectiveCommand);
+  const logPath = getLogPath(t.schedule, effectiveCommand);
+  const { nextRun, nextRunMs } = getNextRun(t.schedule);
+  return {
+    schedule: t.schedule,
+    command: rawCommand,
+    useXvfb: !!useXvfb,
+    line: t.line,
+    humanSchedule: cronToHuman(t.schedule),
+    humanCommand: commandToDescription(rawCommand),
+    formOptions: cronToFormOptions(t.schedule),
+    nextRun: nextRun || null,
+    nextRunMs: nextRunMs != null ? nextRunMs : null,
+    logStatus: getLogStatus(logPath),
+    logPath
+  };
+}
+
 // Página principal: dashboard con lista de tareas (formulario) y buscador
 app.get('/', (req, res) => {
   const crontabResult = readCrontab();
   const tasks = crontabResult.ok ? parseCrontabLines(crontabResult.content) : [];
   const jobs = tasks.map(t => {
-    const humanSchedule = cronToHuman(t.schedule);
-    const humanCommand = commandToDescription(t.command);
-    const { nextRun, nextRunMs } = getNextRun(t.schedule);
-    const logPath = getLogPath(t.schedule, t.command);
-    const logStatus = getLogStatus(logPath);
-    return {
-      schedule: t.schedule,
-      command: t.command,
-      line: t.line,
-      humanSchedule,
-      humanCommand,
-      formOptions: cronToFormOptions(t.schedule),
-      nextRun: nextRun || null,
-      nextRunMs: nextRunMs != null ? nextRunMs : null,
-      logStatus,
-      logPath
-    };
+    const j = taskToJob(t);
+    return { ...j, line: t.line };
   });
   const settings = getSettings();
   res.render('dashboard', {
@@ -66,7 +73,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// API jobs: listar (con humanSchedule, formOptions y nextRun)
+// API jobs: listar (con humanSchedule, formOptions, nextRun, useXvfb)
 app.get('/api/jobs', (req, res) => {
   const result = readCrontab();
   if (!result.ok) {
@@ -74,31 +81,20 @@ app.get('/api/jobs', (req, res) => {
   }
   const tasks = parseCrontabLines(result.content);
   const jobs = tasks.map(t => {
-    const { nextRun, nextRunMs } = getNextRun(t.schedule);
-    const logPath = getLogPath(t.schedule, t.command);
-    const logStatus = getLogStatus(logPath);
-    return {
-      schedule: t.schedule,
-      command: t.command,
-      humanSchedule: cronToHuman(t.schedule),
-      humanCommand: commandToDescription(t.command),
-      formOptions: cronToFormOptions(t.schedule),
-      nextRun: nextRun || null,
-      nextRunMs: nextRunMs != null ? nextRunMs : null,
-      logStatus,
-      logPath
-    };
+    const j = taskToJob(t);
+    return { schedule: j.schedule, command: j.command, useXvfb: j.useXvfb, humanSchedule: j.humanSchedule, humanCommand: j.humanCommand, formOptions: j.formOptions, nextRun: j.nextRun, nextRunMs: j.nextRunMs, logStatus: j.logStatus, logPath: j.logPath };
   });
   res.json({ ok: true, jobs });
 });
 
-// API jobs: contenido del log de una tarea (body: schedule, command)
+// API jobs: contenido del log de una tarea (body: schedule, command, useXvfb?)
 app.post('/api/jobs/log', (req, res) => {
-  const { schedule, command } = req.body || {};
+  const { schedule, command, useXvfb } = req.body || {};
   if (!schedule || !command) {
     return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
   }
-  const logPath = getLogPath(schedule, command);
+  const effectiveCommand = useXvfb ? wrapXvfb(command) : command;
+  const logPath = getLogPath(schedule, effectiveCommand);
   try {
     if (!fs.existsSync(logPath)) {
       return res.json({ ok: true, content: '(El archivo de log aún no existe o la tarea no se ha ejecutado.)', path: logPath });
@@ -119,24 +115,24 @@ app.post('/api/jobs/log', (req, res) => {
   }
 });
 
-// API jobs: forzar ejecución ahora (body: schedule, command). Ejecuta en segundo plano y escribe en el mismo log.
+// API jobs: forzar ejecución ahora (body: schedule, command, useXvfb?). Ejecuta en segundo plano y escribe en el mismo log.
 app.post('/api/jobs/run-now', (req, res) => {
-  const { schedule, command } = req.body || {};
+  const { schedule, command, useXvfb } = req.body || {};
   if (!schedule || !command) {
     return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
   }
+  const effectiveCommand = useXvfb ? wrapXvfb(command) : command;
   const result = readCrontab();
   if (!result.ok) {
     return res.status(500).json({ ok: false, error: result.error });
   }
   const tasks = parseCrontabLines(result.content);
-  const rawCmd = getRawCommandForLog(command);
-  const exists = tasks.some(t => (t.schedule || '').trim() === (schedule || '').trim() && getRawCommandForLog(t.command) === rawCmd);
+  const exists = tasks.some(t => (t.schedule || '').trim() === (schedule || '').trim() && getRawCommandForLog(t.command) === effectiveCommand);
   if (!exists) {
     return res.status(400).json({ ok: false, error: 'La tarea no está en el crontab actual' });
   }
   const logDir = getLogsPath();
-  const fullCommand = rawCmd + ' >> ' + getLogPath(schedule, command) + ' 2>&1';
+  const fullCommand = effectiveCommand + ' >> ' + getLogPath(schedule, effectiveCommand) + ' 2>&1';
   try {
     fs.mkdirSync(logDir, { recursive: true });
   } catch (e) {
@@ -168,13 +164,10 @@ app.get('/api/jobs/day', (req, res) => {
   const startOfDay = new Date(y, m - 1, d, 0, 0, 0, 0);
   const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999);
 
-  const jobsWithRuns = tasks.map(t => ({
-    schedule: t.schedule,
-    command: t.command,
-    humanSchedule: cronToHuman(t.schedule),
-    humanCommand: commandToDescription(t.command),
-    runs: getRunsForDay(t.schedule, dateStr)
-  }));
+  const jobsWithRuns = tasks.map(t => {
+    const j = taskToJob(t);
+    return { ...j, runs: getRunsForDay(t.schedule, dateStr) };
+  });
 
   const slotCount = 96;
   const slots = [];
@@ -186,7 +179,7 @@ app.get('/api/jobs/day', (req, res) => {
     slots.push({ time: timeLabel, minutesFromMidnight, jobs: [] });
   }
 
-  jobsWithRuns.forEach(({ schedule, command, humanSchedule, humanCommand, runs }) => {
+  jobsWithRuns.forEach(({ schedule, command, useXvfb, humanSchedule, humanCommand, runs }) => {
     runs.forEach(run => {
       const runDate = run instanceof Date ? run : new Date(run);
       if (runDate.getTime() < startOfDay.getTime() || runDate.getTime() > endOfDay.getTime()) return;
@@ -194,7 +187,7 @@ app.get('/api/jobs/day', (req, res) => {
       const slotIndex = Math.min(Math.floor(minutesFromMidnight / 15), slotCount - 1);
       if (slotIndex >= 0 && slotIndex < slotCount) {
         const runTime = String(runDate.getHours()).padStart(2, '0') + ':' + String(runDate.getMinutes()).padStart(2, '0');
-        slots[slotIndex].jobs.push({ schedule, command, humanSchedule, humanCommand, runTime });
+        slots[slotIndex].jobs.push({ schedule, command, useXvfb, humanSchedule, humanCommand, runTime });
       }
     });
   });
@@ -256,7 +249,8 @@ app.post('/api/jobs', (req, res) => {
     .map(j => {
       const schedule = (j.schedule || '').trim();
       const rawCommand = (j.command || '').trim();
-      const command = ensureLogRedirection(rawCommand, schedule, logDir);
+      const effectiveCommand = j.useXvfb ? wrapXvfb(rawCommand) : rawCommand;
+      const command = ensureLogRedirection(effectiveCommand, schedule, logDir);
       return schedule ? schedule + ' ' + command : command;
     })
     .filter(Boolean);

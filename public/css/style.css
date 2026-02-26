@@ -653,6 +653,25 @@ body {
 
 .form-row-inline .form-row { margin-bottom: 0; flex: 1; min-width: 120px; }
 
+.form-row .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.form-row .checkbox-label input[type="checkbox"] {
+  width: auto;
+  max-width: none;
+}
+
+.form-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.9rem;
+  color: var(--text-muted, #666);
+}
+
 .form-actions {
   margin-top: 1rem;
   display: flex;
