@@ -217,7 +217,7 @@ function getLogStatus(logPath) {
     fs.readSync(fd, buf, 0, buf.length, stat.size - buf.length);
     fs.closeSync(fd);
     const tail = buf.toString('utf8');
-    if (/error|failed|exception|fail\s|EADDRINUSE|ECONNREFUSED|ENOENT|exit\s+code\s+[1-9]|SyntaxError|ReferenceError/i.test(tail)) return 'failed';
+    if (/\b(?<!no\s+)(error|errore)s?\b(?!\s*[:=]*\s*0)|failed|exception|fail\s|EADDRINUSE|ECONNREFUSED|ENOENT|exit\s+code\s+[1-9]|SyntaxError|ReferenceError/i.test(tail)) return 'failed';
     return 'ok';
   } catch (e) {
     return 'unknown';
@@ -272,7 +272,7 @@ app.post('/api/settings', (req, res) => {
   // #region agent log
   const fs = require('fs');
   const pl = JSON.stringify({ sessionId: 'dfee4a', location: 'app.js:POST /api/settings', message: 'body', data: { bodyKeys: Object.keys(req.body || {}), reposPath, reposPathLen: reposPath.length }, hypothesisId: 'A', timestamp: Date.now() }) + '\n';
-  try { fs.appendFileSync('/home/mazingerzot/Documentos/DEV/EasyCronTab/.cursor/debug-dfee4a.log', pl); } catch (_) {}
+  try { fs.appendFileSync('/home/mazingerzot/Documentos/DEV/EasyCronTab/.cursor/debug-dfee4a.log', pl); } catch (_) { }
   // #endregion
   setReposPath(reposPath);
   res.json({ ok: true, reposPath: getSettings().reposPath });
@@ -295,7 +295,7 @@ app.get('/api/repos', (req, res) => {
   // #region agent log
   const fs = require('fs');
   const pl = JSON.stringify({ sessionId: 'dfee4a', location: 'app.js:GET /api/repos', message: 'getReposPath before listRepos', data: { reposPath: currentPath, len: (currentPath || '').length }, hypothesisId: 'B', timestamp: Date.now() }) + '\n';
-  try { fs.appendFileSync('/home/mazingerzot/Documentos/DEV/EasyCronTab/.cursor/debug-dfee4a.log', pl); } catch (_) {}
+  try { fs.appendFileSync('/home/mazingerzot/Documentos/DEV/EasyCronTab/.cursor/debug-dfee4a.log', pl); } catch (_) { }
   // #endregion
   const pathToUse = clientPath || currentPath || '';
   const result = listRepos(pathToUse || undefined);
