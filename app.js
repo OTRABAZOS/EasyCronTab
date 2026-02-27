@@ -82,7 +82,7 @@ app.get('/api/jobs', (req, res) => {
   const tasks = parseCrontabLines(result.content);
   const jobs = tasks.map(t => {
     const j = taskToJob(t);
-    return { schedule: j.schedule, command: j.command, useXvfb: j.useXvfb, humanSchedule: j.humanSchedule, humanCommand: j.humanCommand, formOptions: j.formOptions, nextRun: j.nextRun, nextRunMs: j.nextRunMs, logStatus: j.logStatus, logPath: j.logPath };
+    return { schedule: j.schedule, command: j.command, useXvfb: j.useXvfb, line: t.line, humanSchedule: j.humanSchedule, humanCommand: j.humanCommand, formOptions: j.formOptions, nextRun: j.nextRun, nextRunMs: j.nextRunMs, logStatus: j.logStatus, logPath: j.logPath };
   });
   res.json({ ok: true, jobs });
 });

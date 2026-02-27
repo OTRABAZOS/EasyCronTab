@@ -25,7 +25,7 @@
 
   <main class="main-content">
     <div class="intro-card content-section" id="intro-card">
-      <p class="intro intro-lead">🚀 Crea y edita tareas programadas sin tocar comandos de Linux: elige frecuencia (cada X minutos, diario, semanal…), la hora y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
+      <p class="intro intro-lead">🚀 Crea y gestiona tareas programadas de forma sencilla. Elige frecuencia y el comando a ejecutar. También puedes buscar tareas en lenguaje natural.</p>
     </div>
 
     <!-- Buscador: resultados clickeables (Editar/Eliminar); al buscar solo se muestran esos resultados -->
@@ -42,6 +42,14 @@
       <p class="search-ver-todas" id="search-ver-todas" style="display: none; margin-top: 0.5rem;">
         <button type="button" class="btn btn-small btn-edit" id="btn-ver-todas">Ver todas las tareas</button>
       </p>
+    </section>
+
+    <!-- Inicio: resumen de próximas ejecuciones -->
+    <section class="card-section content-section" id="inicio-proximas">
+      <h2><span class="section-emoji" aria-hidden="true">⏱</span> Próximas ejecuciones</h2>
+      <p class="intro">Las próximas tareas que se ejecutarán. Para ver el listado completo, ve a <a href="#schedule" data-view="schedule" class="nav-link-inline">Lanzamientos</a>.</p>
+      <ul class="jobs-list jobs-list--compact" id="inicio-proximas-list"></ul>
+      <p class="no-jobs" id="no-jobs-inicio">No hay tareas programadas.</p>
     </section>
 
     <!-- Schedule: todas las tareas ordenadas por próxima ejecución -->
@@ -260,7 +268,7 @@
     <section class="card-section content-section" id="acerca">
       <h2><span class="section-emoji" aria-hidden="true">ℹ️</span> Acerca de</h2>
       <div class="about-content">
-        <p class="about-app-name">EasyCronTab</p>
+        <p class="about-app-name">EasyCronTab by mazingerZot</p>
         <p class="about-version">Versión <strong><%= typeof appVersion !== 'undefined' ? appVersion : '1.0.0' %></strong></p>
         <% if (typeof appDescription !== 'undefined' && appDescription) { %>
         <p class="about-description"><%= appDescription %></p>
@@ -307,7 +315,7 @@
 
       // Navegación por vistas: al hacer clic en el menú se muestra solo esa sección (sin anclas de una sola página)
       var VIEW_SECTIONS = {
-        'inicio': ['intro-card', 'search-section', 'vista-dia'],
+        'inicio': ['intro-card', 'search-section', 'inicio-proximas'],
         'schedule': ['schedule'],
         'vista-dia': ['vista-dia'],
         'tareas': ['tareas'],
@@ -315,6 +323,7 @@
         'config': ['config'],
         'acerca': ['acerca']
       };
+      var refreshJobs = null;
       function switchView(viewName) {
         var ids = VIEW_SECTIONS[viewName];
         if (!ids) viewName = 'inicio'; ids = VIEW_SECTIONS[viewName];
@@ -325,6 +334,7 @@
           a.classList.toggle('nav-active', a.getAttribute('data-view') === viewName);
         });
         if (location.hash !== '#' + viewName) location.hash = viewName;
+        if ((viewName === 'schedule' || viewName === 'vista-dia') && typeof refreshJobs === 'function') refreshJobs();
       }
       document.getElementById('main-nav').addEventListener('click', function (e) {
         var a = e.target.closest('a[data-view]');
@@ -411,6 +421,13 @@
         }
         return -1;
       }
+      function findJobIndexByLine(line) {
+        if (line == null || line === '') return -1;
+        for (var i = 0; i < jobs.length; i++) {
+          if (jobs[i].line === line) return i;
+        }
+        return -1;
+      }
 
       function makeJobCard(job, index) {
         var nextRunStr = '';
@@ -442,15 +459,20 @@
         var listTareas = document.getElementById('tareas-list');
         var noJobs = document.getElementById('no-jobs');
         var noJobsTareas = document.getElementById('no-jobs-tareas');
+        var inicioList = document.getElementById('inicio-proximas-list');
+        var noJobsInicio = document.getElementById('no-jobs-inicio');
         list.innerHTML = '';
         if (listTareas) listTareas.innerHTML = '';
+        if (inicioList) inicioList.innerHTML = '';
         if (jobs.length === 0) {
           if (noJobs) noJobs.style.display = 'block';
           if (noJobsTareas) noJobsTareas.style.display = 'block';
+          if (noJobsInicio) noJobsInicio.style.display = 'block';
           return;
         }
         if (noJobs) noJobs.style.display = 'none';
         if (noJobsTareas) noJobsTareas.style.display = 'none';
+        if (noJobsInicio) noJobsInicio.style.display = 'none';
         var sorted = jobs.slice().sort(function (a, b) {
           var ma = a.nextRunMs != null ? a.nextRunMs : 99999999999999;
           var mb = b.nextRunMs != null ? b.nextRunMs : 99999999999999;
@@ -468,6 +490,19 @@
         }
         appendCardTo(list);
         if (listTareas) appendCardTo(listTareas);
+        if (inicioList) {
+          var n = Math.min(5, sorted.length);
+          for (var i = 0; i < n; i++) {
+            var job = sorted[i];
+            var idx = findJobIndex(job.schedule, job.command, job.useXvfb);
+            if (idx < 0) continue;
+            var li = document.createElement('li');
+            li.className = 'job-card';
+            li.innerHTML = makeJobCard(job, idx);
+            inicioList.appendChild(li);
+          }
+          if (inicioList.children.length) bindListeners(inicioList);
+        }
         function bindListeners(container) {
           if (!container) return;
           container.querySelectorAll('[data-action="edit"]').forEach(function (btn) {
@@ -577,7 +612,9 @@
         }
         showFrequencyRows();
         panel.style.display = 'block';
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+        });
       }
 
       function closeForm() {
@@ -774,6 +811,7 @@
       }
 
       document.getElementById('btn-add-from-repo').addEventListener('click', function () {
+        switchView('tareas');
         var panel = document.getElementById('repo-picker-panel');
         panel.style.display = 'block';
         var pathInput = document.getElementById('repo-picker-path');
@@ -784,6 +822,9 @@
             document.getElementById('repo-picker-path-status').textContent = data.error;
             document.getElementById('repo-picker-path-status').className = 'status err';
           }
+        });
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () { panel.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
         });
       });
 
@@ -1213,7 +1254,7 @@
         if (scheduleSection) scheduleSection.style.display = 'none';
         var html = '<p class="search-result-count">' + results.length + ' resultado' + (results.length !== 1 ? 's' : '') + '.</p><ul class="search-results-list">';
         results.forEach(function (r) {
-          var idx = findJobIndex(r.schedule, r.command, r.useXvfb);
+          var idx = (r.line != null && r.line !== '') ? findJobIndexByLine(r.line) : findJobIndex(r.schedule, r.command, r.useXvfb);
           if (idx < 0) return;
           var job = jobs[idx];
           html += '<li class="job-card">' + makeJobCard(job, idx) + '</li>';
@@ -1228,7 +1269,7 @@
             var i = parseInt(btn.getAttribute('data-index'), 10);
             jobs.splice(i, 1);
             renderScheduleList();
-            renderSearchResultsFromData(lastSearchResults.filter(function (r) { return findJobIndex(r.schedule, r.command, r.useXvfb) >= 0; }));
+            renderSearchResultsFromData(lastSearchResults.filter(function (r) { return ((r.line != null && r.line !== '' && findJobIndexByLine(r.line) >= 0) || findJobIndex(r.schedule, r.command, r.useXvfb) >= 0); }));
           });
         });
         searchResults.querySelectorAll('.job-log-view').forEach(function (btn) {
@@ -1457,6 +1498,21 @@
       }
       if (dayViewDate) dayViewDate.addEventListener('change', loadDayView);
       loadDayView();
+
+      refreshJobs = function () {
+        fetch('/api/jobs').then(function (r) { return r.json(); }).then(function (data) {
+          if (!data.ok || !data.jobs) return;
+          jobs.splice(0, jobs.length);
+          data.jobs.forEach(function (j) { jobs.push(j); });
+          renderScheduleList();
+          var view = (location.hash || '#inicio').slice(1);
+          if (view === 'vista-dia') loadDayView();
+          if (typeof renderSearchResultsFromData === 'function' && searchInput && searchInput.value.trim()) renderSearchResultsFromData(lastSearchResults);
+        }).catch(function () {});
+      };
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') refreshJobs();
+      });
     })();
   </script>
 </body>

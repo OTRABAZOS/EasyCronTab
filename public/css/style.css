@@ -435,10 +435,15 @@ body {
   margin-bottom: 0.5rem;
 }
 
+.nav-link-inline { color: var(--link-color, #6b9fff); text-decoration: none; }
+.nav-link-inline:hover { text-decoration: underline; }
+
 .jobs-list {
   list-style: none;
   margin-bottom: 1rem;
 }
+
+.jobs-list--compact .job-card { padding: 0.75rem 1rem; margin-bottom: 0.5rem; }
 
 .job-card {
   background: var(--bg-card);
