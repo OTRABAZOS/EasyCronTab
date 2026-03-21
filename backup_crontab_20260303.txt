@@ -1,0 +1,11 @@
+0 */6 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/morgana_facebook_posts_buscadores && npm start' >> /home/mazingerzot/.local/share/easycrontab/logs/90a2fae2ba92.log 2>&1
+0 1 * * * cd /home/mazingerzot/DEV/morgana_facebook_posts_buscadores && npm run cleanup >> /home/mazingerzot/.local/share/easycrontab/logs/20703e94d419.log 2>&1
+0 */8 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/morgana_facebook_posts && npm run scrape:sql:pages' >> /home/mazingerzot/.local/share/easycrontab/logs/47c961acaec4.log 2>&1
+0 */7 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/morgana_facebook_posts && npm run scrape:sql:groups' >> /home/mazingerzot/.local/share/easycrontab/logs/5d1a26e254bc.log 2>&1
+30 */7 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/morgana_facebook_posts && npm run scrape:sql:profiles' >> /home/mazingerzot/.local/share/easycrontab/logs/3b26a8b58b90.log 2>&1
+0 */5 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/morgana_instagram_comments && npm start' >> /home/mazingerzot/.local/share/easycrontab/logs/01b8ab2063f6.log 2>&1
+0 */5 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/digital_posts_buscadores && npm start' >> /home/mazingerzot/.local/share/easycrontab/logs/4e11ba8f9ad7.log 2>&1
+0 4 * * * cd /home/mazingerzot/DEV/mochi_chatbot_nataliarubio_llaryora && npm run automejora-ai >> /home/mazingerzot/.local/share/easycrontab/logs/6f6a2c354a26.log 2>&1
+0 2 * * * cd /home/mazingerzot/DEV/morgana_facebook_posts && npm run cleanup-logs >> /home/mazingerzot/.local/share/easycrontab/logs/fb34f11e980f.log 2>&1
+0 7 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/digital_posts_buscadores && npm start' >> /home/mazingerzot/.local/share/easycrontab/logs/33209de4f4c8.log 2>&1
+0 11 * * * xvfb-run -a sh -c 'cd /home/mazingerzot/DEV/digital_posts_buscadores && npm start' >> /home/mazingerzot/.local/share/easycrontab/logs/d58aaaff371c.log 2>&1
