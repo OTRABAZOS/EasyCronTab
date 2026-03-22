@@ -3,6 +3,11 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const express = require('express');
 const path = require('path');
+const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
+const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
+require('dotenv').config();
 const config = require('./config');
 const { readCrontab, writeCrontab, parseCrontabLines } = require('./lib/crontab');
 const { buildSearchIndex, search } = require('./lib/search');
@@ -14,6 +19,7 @@ const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
 const { wrapXvfb, parseXvfbCommand } = require('./lib/xvfb');
+const { findUser, hasAccess, requireAuth } = require('./lib/auth');
 
 const pkg = require('./package.json');
 const appVersion = pkg.version || '0.0.0';
@@ -23,12 +29,77 @@ const appRepo = 'https://github.com/OTRABAZOS/EasyCronTab';
 const app = express();
 const PORT = config.server.port;
 
+// Seguridad
+app.use(helmet({ contentSecurityPolicy: false }));
+app.set('trust proxy', 1);
+
+// Sesiones con MySQL store
+const sessionStore = new MySQLStore({
+  host: process.env.AUTH_DB_HOST || 'db1.bwai.cc',
+  user: process.env.AUTH_DB_USER,
+  password: process.env.AUTH_DB_PASSWORD,
+  database: process.env.AUTH_DB_NAME || 'brandwaiapp',
+  createDatabaseTable: true,
+  schema: { tableName: 'sessions_easycrontab' },
+  expiration: 8 * 60 * 60 * 1000, // 8 horas
+  checkExpirationInterval: 15 * 60 * 1000,
+});
+
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  store: sessionStore,
+  resave: false,
+  saveUninitialized: false,
+  rolling: true,
+  cookie: {
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax',
+    maxAge: 8 * 60 * 60 * 1000,
+  },
+}));
+
+// Rate limit en login: 10 intentos / 15 min
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Demasiados intentos. Espera 15 minutos.',
+});
+
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json({ limit: '2mb' }));
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Login routes
+app.get('/login', (req, res) => {
+  if (req.session.user) return res.redirect('/');
+  res.render('login', { error: null });
+});
+
+app.post('/login', loginLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const user = await findUser(email, password);
+    if (!user || !hasAccess(user.role)) {
+      return res.render('login', { error: 'Credenciales incorrectas o sin acceso.' });
+    }
+    req.session.regenerate((err) => {
+      if (err) return res.render('login', { error: 'Error de sesión.' });
+      req.session.user = { email: user.email, role: user.role, name: user.first_name };
+      res.redirect('/');
+    });
+  } catch (e) {
+    console.error('Auth error:', e.message);
+    res.render('login', { error: 'Error interno. Inténtalo de nuevo.' });
+  }
+});
+
+app.post('/logout', (req, res) => {
+  req.session.destroy(() => res.redirect('/login'));
+});
 
 // Normaliza tarea del crontab a job con comando "raw" y flag useXvfb
 function taskToJob(t) {
@@ -50,6 +121,9 @@ function taskToJob(t) {
     logPath
   };
 }
+
+// Todas las rutas siguientes requieren autenticación
+app.use(requireAuth);
 
 // Página principal: dashboard con lista de tareas (formulario) y buscador
 app.get('/', (req, res) => {
