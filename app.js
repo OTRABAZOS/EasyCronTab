@@ -88,7 +88,7 @@ app.post('/login', loginLimiter, async (req, res) => {
     }
     req.session.regenerate((err) => {
       if (err) return res.render('login', { error: 'Error de sesión.' });
-      req.session.user = { email: user.email, role: user.role, name: user.first_name };
+      req.session.user = { email: user.email, role: user.role };
       res.redirect('/');
     });
   } catch (e) {
