@@ -158,7 +158,7 @@ git push origin main
 # 5. Deploy en la VM
 gcloud compute ssh crawlers-vm --zone=europe-west1-b \
   --project=dataagencies \
-  --command="cd /ruta/easycrontab && git pull origin main && npm ci && pm2 restart easycrontab"
+  --command="cd ~/crawlers/EasyCronTab && git pull origin main && npm ci && pm2 restart EasyCronTab"
 
 # 6. Limpiar branch
 git branch -d feat/nombre-descriptivo
