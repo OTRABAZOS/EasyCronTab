@@ -276,7 +276,10 @@ function getRawCommandForLog(command) {
 }
 
 function getLogPath(schedule, command) {
-  const rawCmd = getRawCommandForLog(command || '');
+  const cmd = (command || '').trim();
+  const explicit = cmd.match(/\s*>>\s*(\S+)\s+2>&1\s*$/);
+  if (explicit) return explicit[1];
+  const rawCmd = getRawCommandForLog(cmd);
   const hash = crypto.createHash('md5').update((schedule || '') + '\n' + rawCmd).digest('hex').slice(0, 12);
   return path.join(getLogsPath(), hash + '.log');
 }
