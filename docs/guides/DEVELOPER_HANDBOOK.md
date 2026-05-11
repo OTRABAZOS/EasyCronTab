@@ -43,6 +43,18 @@ Copiar `.env.example` a `.env` para configurar:
 
 No se requieren variables de entorno para uso básico. La app usa el crontab del usuario que la ejecuta.
 
+### VS Code — Settings recomendados (Windows)
+
+Si trabajas en Windows, añade estos settings a tu VS Code (`Ctrl+Shift+P` → "Open User Settings JSON"):
+
+```json
+"terminal.integrated.enablePersistentSessions": true,
+"terminal.integrated.persistentSessionReviveProcess": "onExitAndWindowClose",
+"window.restoreWindows": "all"
+```
+
+Sin estos settings, los terminales (nombres, iconos, colores) se pierden al cerrar VS Code o reiniciar el equipo.
+
 ### Comandos
 
 ```bash
@@ -135,44 +147,95 @@ gcloud compute ssh crawlers-vm --zone=europe-west1-b \
 # Abrir http://localhost:3000 en el navegador local
 ```
 
-### Git Flow — Feature Branch → Merge → Deploy (OBLIGATORIO)
+### Git Flow: Feature Branch → Merge → Deploy (OBLIGATORIO)
+
+> Aplica a **todos los repositorios** de Trawlingweb. Protocolo completo en `wiki/AI_CODE_INSTRUCTIONS.md` §9.4.
 
 **NUNCA commitear directamente a `main`** para cambios significativos (features, fixes, refactors). Commits triviales (typos, formato) pueden ir directo a main.
 
+#### Rama activa
+
+- Rama de desarrollo: `vN` (versionado incremental — cada bloque de trabajo incrementa el número)
+- Rama de producción: `main`
+
+#### Flujo obligatorio
+
 ```bash
-# 1. Crear branch desde main
+# 1. Determinar siguiente número de branch
+git branch -r   # ver branches existentes → siguiente = max + 1
+
+# 2. Crear branch desde main
 git checkout main && git pull origin main
-git checkout -b feat/nombre-descriptivo   # o fix/, docs/, refactor/
+git checkout -b vN    # N = siguiente número
 
-# 2. Trabajar y commitear en la branch
-git add <archivos> && git commit -m "feat: descripción"
+# 3. Trabajar y commitear en la branch
+git add <archivos> && git commit -m "descripción del cambio"
 
-# 3. Push de la branch
-git push -u origin feat/nombre-descriptivo
+# 4. Push de la branch
+git push -u origin vN
 
-# 4. Merge a main
+# 5. Merge a main (siempre con --no-ff para conservar historial)
 git checkout main && git pull origin main
-git merge feat/nombre-descriptivo
+git merge --no-ff vN -m "merge: vN → main — descripción breve"
 git push origin main
 
-# 5. Deploy en la VM
+# 6. Deploy en la VM
 gcloud compute ssh crawlers-vm --zone=europe-west1-b \
   --project=dataagencies \
   --command="cd ~/crawlers/EasyCronTab && git pull origin main && npm ci && pm2 restart EasyCronTab"
 
-# 6. Limpiar branch
-git branch -d feat/nombre-descriptivo
-git push origin --delete feat/nombre-descriptivo
+# 7. Verificar deploy (health check, logs)
+
+# 8. Notificación Telegram a Trawlingweb DEV Force (ver abajo)
+
+# 9. NO borrar branches — se conservan todas como histórico y backup de rollback
 ```
 
-**Convención de nombres de branch:**
+#### Convención de nombres de branch
 
-| Tipo | Prefijo | Ejemplo |
-|------|---------|---------|
-| Feature nueva | `feat/` | `feat/browse-manual-path` |
-| Bug fix | `fix/` | `fix/repos-path-readonly` |
-| Documentación | `docs/` | `docs/update-handbook` |
-| Refactor | `refactor/` | `refactor/settings-module` |
+Se usa **versionado incremental** (`vN`). Cada nuevo bloque de trabajo incrementa el número:
+
+| Repo tiene branches               | Siguiente branch     |
+| --------------------------------- | -------------------- |
+| ninguna                           | `v1`                 |
+| `v3`, `v4`, `v5`                  | `v6`                 |
+| `v12`, `v13`, `v14`, `v15`, `v16` | `v17`                |
+
+La IA DEBE consultar las branches existentes (`git branch -r`) para determinar el siguiente número antes de crear una nueva.
+
+#### Reglas
+
+1. **NUNCA commitear directamente a `main`** para cambios significativos. Triviales (typos, formato) sí.
+2. **La IA DEBE crear una branch `vN`** al iniciar trabajo significativo, sin preguntar.
+3. **Merge a main solo cuando el trabajo está completo** y verificado.
+4. **Merge siempre con `--no-ff`** para conservar el historial de la branch.
+5. **Deploy solo desde `main`** — nunca desde una feature branch.
+6. **NUNCA borrar branches mergeadas** — ni locales ni remotas. Se conservan todas como backup de rollback e histórico. Si un deploy falla, la branch anterior es el último estado estable conocido.
+7. **Verificar que el deploy funciona** antes de considerar la branch mergeada con éxito.
+
+### Notificación Telegram en cada deploy (OBLIGATORIA)
+
+> Política completa: `wiki/AI_CODE_INSTRUCTIONS.md` §13.
+
+- **Canal**: Trawlingweb DEV Force (`-1001719756002`)
+- **Bot**: `@mochiAI_bot`
+- **Formato** (igual para todos los deploys internos):
+
+```
+🚀 *EasyCronTab*
+━━━━━━━━━━━━━━━━━━━━
+📅 YYYY-MM-DD
+🌿 Rama: vN → main
+🖥️ VM: crawlers-vm
+
+📦 Cambios:
+• Cambio 1
+• Cambio 2
+
+⚙️ Ejecución: PM2: EasyCronTab puerto 3000
+
+✅ Deploy completado
+```
 
 ### Encadenamiento Wiki tras Commit/Deploy
 
@@ -186,10 +249,71 @@ Tras un commit significativo o deploy, la IA actualiza automáticamente (sin pre
 
 ## Modelo IA Recomendado
 
-- **Complejidad del repo**: Baja-Media
-- **Modelo de inicio recomendado**: Sonnet
-- **Cuándo escalar a Opus**: Debugging de lógica compleja en crontab parsing, decisiones de arquitectura sobre PM2 integration, o refactors con impacto en múltiples módulos lib/
-- **Lenguaje principal**: Node.js
+> Política completa: `wiki/AI_CODE_INSTRUCTIONS.md` §14. **Regla de oro: usar siempre el modelo más barato que pueda resolver la tarea. Cada token cuenta.**
+
+- **Complejidad del repo**: Baja-Media — app Express + EJS + vanilla JS, módulos lib/ pequeños y bien delimitados
+- **Modelo de inicio recomendado**: Sonnet para desarrollo estándar
+- **Lenguaje principal**: Node.js (CommonJS vanilla)
+
+### Cuándo usar cada modelo en este repo
+
+| Modelo | Tareas típicas en `EasyCronTab` |
+|--------|----------------------------------|
+| **Haiku** (mínimo coste) | Crear fragmentos de changelog, formatear código, renombrar variables, generar boilerplate de vistas EJS, leer/resumir ficheros, buscar en código, corregir typos, aplicar el mismo cambio en N ficheros |
+| **Sonnet** (estándar) | Implementar features de UI, añadir endpoints REST, escribir lógica de parsing de crontab dentro de `lib/`, fix de bugs en un módulo concreto, refactors dentro de un fichero |
+| **Opus** (solo cuando es imprescindible) | Debugging de lógica compleja de crontab parsing con casos edge (DST, rangos, intersecciones), decisiones de arquitectura sobre integración PM2, refactors con impacto cross-módulo en `lib/`, auditoría del flujo de escritura del crontab (vector crítico de seguridad) |
+
+### Delegación a subagentes (OBLIGATORIO)
+
+Cuando la IA está en Sonnet u Opus y necesita hacer una tarea simple, **DEBE** lanzar un subagente con `model: "haiku"` en lugar de hacerla ella misma. Tareas típicas a delegar a Haiku desde Opus/Sonnet:
+
+- Crear/editar fragmentos de changelog en `changelogs/` o `wiki/changelogs/`
+- Búsquedas exhaustivas de código que no requieran razonamiento
+- Resúmenes de ficheros largos
+- Renombrar identificadores en N ficheros
+
+### Antipatrones (PROHIBIDO)
+
+- Usar Opus para crear changelogs, leer ficheros, formatear código o cualquier tarea que Haiku resuelva.
+- Usar Sonnet para tareas mecánicas que Haiku resuelve igual de bien.
+- Repetir contexto innecesario al modelo, generar explicaciones largas no solicitadas, reescribir código que no se pidió cambiar.
+
+## Capa Conversacional Telegram + Claude (OBLIGATORIO si aplica)
+
+> Política completa: `wiki/AI_CODE_INSTRUCTIONS.md` §17. Vigente desde 2026-05-11 con el release de `mochi_chatbot_llm` v2.0.0.
+
+EasyCronTab es una UI local del crontab/PM2 del operador. Si en algún momento se quiere operar EasyCronTab desde el móvil — consultar qué jobs van a ejecutarse hoy, activar/desactivar un job, lanzar `run-now`, ver el log de la última ejecución, o gestionar procesos PM2 conversacionalmente — **NO construir la integración Telegram + Claude desde cero**. Existe una base reusable.
+
+### Cuándo aplica en este repo
+
+- Buscar tareas en lenguaje natural por chat (mismo flujo que `/api/search`) y devolverlas formateadas.
+- Consultar la vista diaria (`/api/jobs/day`) desde el móvil — "¿qué cron toca hoy a partir de las 18:00?".
+- Lanzar `run-now` sobre un job concreto sin abrir terminal ni navegador.
+- Tail de logs de un job (`/api/jobs/log`) y resumen conversacional del último error.
+- Estado de procesos PM2 (`/api/pm2/list`) y restart selectivo.
+
+### Cómo proceder
+
+1. **Consultar la doc canónica**: [`wiki/docs/mochi_chatbot_master.md`](../../../wiki/docs/mochi_chatbot_master.md) — describe la versión `mochi-chatbot-llm` v2+.
+2. **Clonar la base**: repo `trawlingweb/mochi_chatbot_master`, rama estable (`v10` o `main`). Cada bot vive en su propio clon (`/srv/bots/<nombre>/` en la VM), con su `.env` y su `src/prompts/<nombre>.md`.
+3. **Atajo**: lanzar el slash command global `/user:create-mochi-bot <nombre>` desde Claude Code; automatiza clone, scaffold del prompt y recordatorios de configuración.
+4. **Procedimiento detallado**: `docs/ADD_NEW_BOT.md` dentro del propio repo `mochi_chatbot_master`.
+
+### Reglas duras
+
+- **Default Haiku 4.5**. Escalado a Sonnet 4.6 SOLO cuando el usuario escribe `/sonnet`, `usa sonnet` o `modelo grande`. **No introducir routing automático** "Haiku para fácil, Sonnet para difícil" (incidente OpenClaw 2026-05-10).
+- **Un bot por repo, un token Telegram por bot, un proceso PM2 por bot.** No multiplexar varios contextos en un solo bot.
+- **`.env` siempre fuera del control de versión.** Verificar `git status` antes de commits grandes en cualquier clon.
+- **`src/prompts/<nombre>.md`** es el sitio para personalizar el bot. Si necesita ejecutar acciones críticas (modificar crontab, `pm2 restart`, `run-now`), envolverlas en tools controladas en `src/IntentRouter.js`. Recordar que `POST /api/jobs` reemplaza el crontab completo — la tool debe validar antes de escribir.
+
+### Qué NO hacer
+
+- No crear desde cero una nueva integración Telegram + Claude en este repo. Si la base no cubre un caso, abrir PR a `mochi_chatbot_master` en vez de un fork divergente.
+- No mezclar varios bots en un solo proceso "multi-tenant".
+- No commitear el `.env` de ningún clon.
+- No exponer escritura de crontab arbitraria al bot sin confirmación humana — el ataque más fácil contra EasyCronTab es inyectar un cron malicioso.
+
+---
 
 ## Documentación Relacionada
 
