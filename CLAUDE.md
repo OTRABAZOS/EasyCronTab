@@ -71,3 +71,13 @@ Each cron task's log file is identified by an MD5 hash of `schedule + "\n" + raw
 - `GET /api/pm2/list`, `POST /api/pm2/{start,stop,restart,delete,save,log}` — PM2 management
 
 **Important behavior:** `POST /api/jobs` replaces the **entire** crontab of the running user. The app always runs as the user who starts it and manages that user's crontab only.
+
+---
+
+## Estándares Trawlingweb
+
+Este repo sigue los estándares globales documentados en `wiki/AI_CODE_INSTRUCTIONS.md`. Trabajar siempre con un workspace que incluya el repo `wiki`.
+
+**Al cerrar sesión o tras un deploy significativo**, preguntar al usuario:
+1. ¿Hay cambios estructurales que actualizar en este `CLAUDE.md`? (nueva arquitectura, nueva convención, nuevo módulo clave)
+2. ¿Hay decisiones o aprendizajes de la sesión que guardar en memoria?
