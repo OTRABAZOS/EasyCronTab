@@ -488,7 +488,7 @@ function startServer(port) {
   const http = require('http');
   const server = http.createServer(app);
   const listenPort = port != null ? port : PORT;
-  server.listen(listenPort, () => {
+  server.listen(listenPort, process.env.HOST || '127.0.0.1', () => {
     console.log(`EasyCronTab en http://localhost:${server.address().port}`);
   });
   server.on('error', (err) => {
