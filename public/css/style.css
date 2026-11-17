@@ -1014,3 +1014,32 @@ body {
   gap: 0.5rem;
   flex-shrink: 0;
 }
+
+/* Título de la tarea (comentario «# título: …» en el crontab) */
+.job-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 0.2rem;
+}
+
+/* Filtro de la pestaña Tareas */
+.tareas-search-box { margin-bottom: 0.25rem; max-width: none; }
+.tareas-search-box input { width: 100%; box-sizing: border-box; }
+.tareas-search-count { color: var(--text-muted); font-size: 0.85rem; min-height: 1.2em; margin: 0 0 0.75rem; }
+
+/* Copias de seguridad */
+.backups-list { list-style: none; padding: 0; margin: 0 0 1rem; }
+.backup-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.backup-date { font-weight: 600; font-family: var(--font-mono); }
+.backup-meta { color: var(--text-muted); font-size: 0.85rem; flex: 1; min-width: 12rem; overflow-wrap: anywhere; }
+.backup-actions { display: flex; gap: 0.4rem; }
+.backups-preview { max-height: 22rem; overflow: auto; margin-bottom: 1rem; }
+#backups-dir { overflow-wrap: anywhere; }

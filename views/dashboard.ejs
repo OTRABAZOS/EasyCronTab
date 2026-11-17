@@ -83,16 +83,34 @@
         <p class="error-message">Error al leer crontab: <%= crontabError %></p>
       <% } %>
 
+      <div class="search-box tareas-search-box">
+        <input type="search" id="tareas-search" placeholder="🔍 Filtra por título, comando o frecuencia (ej.: whatsapp, cada 5 minutos, lunes)" autocomplete="off" aria-label="Filtrar tareas">
+      </div>
+      <p class="tareas-search-count" id="tareas-search-count" aria-live="polite"></p>
+
       <div class="form-actions" style="margin-bottom: 1rem;">
         <button type="button" class="btn btn-primary" id="btn-add-job">Añadir tarea</button>
         <button type="button" class="btn btn-primary" id="btn-add-from-repo">Añadir desde repositorio</button>
-        <button type="button" class="btn btn-primary" id="btn-save-crontab" title="Escribir los cambios en el crontab del sistema">Guardar</button>
-        <span id="save-status" class="status"></span>
+        <button type="button" class="btn btn-primary" id="btn-save-crontab" title="Hace una copia del crontab y después escribe los cambios">Guardar</button>
+        <button type="button" class="btn btn-small btn-edit" id="btn-backups" title="Ver y restaurar copias de seguridad del crontab">Copias de seguridad</button>
+        <span id="save-status" class="status" aria-live="polite"></span>
+      </div>
+
+      <div class="job-form-panel backups-panel" id="backups-panel" style="display: none;">
+        <h3><span class="section-emoji" aria-hidden="true">🗂️</span> Copias de seguridad del crontab</h3>
+        <p class="intro">Se hace una copia automática antes de cada guardado o restauración. Se conservan las últimas 30 en <code id="backups-dir"></code>. Al restaurar, primero se copia el crontab actual.</p>
+        <ul class="backups-list" id="backups-list"></ul>
+        <pre class="log-modal-content backups-preview" id="backups-preview" style="display: none;"></pre>
+        <div class="form-actions">
+          <button type="button" class="btn btn-small btn-edit" id="backups-close">Cerrar</button>
+          <span id="backups-status" class="status" aria-live="polite"></span>
+        </div>
       </div>
 
       <h3 class="tasks-list-heading" style="margin-top: 1.25rem; margin-bottom: 0.5rem;">Todas las tareas</h3>
       <ul class="jobs-list" id="tareas-list"></ul>
       <p class="no-jobs" id="no-jobs-tareas" style="display: none;">No hay tareas. Añade una con el botón de arriba.</p>
+      <p class="no-jobs" id="no-jobs-tareas-filter" style="display: none;">Ninguna tarea coincide con el filtro.</p>
 
       <div class="how-to-repos" aria-label="Cómo programar tareas con tus repos">
         <p><strong>¿Cómo uso la carpeta de repos para programar tareas?</strong></p>
@@ -140,6 +158,11 @@
         <h3 id="job-form-title"><span class="section-emoji" aria-hidden="true">📝</span> Nueva tarea</h3>
         <form id="job-form">
           <input type="hidden" id="job-edit-index" value="-1">
+          <div class="form-row">
+            <label for="job-title">Título</label>
+            <input type="text" id="job-title" name="title" maxlength="120" placeholder="Ej.: Vigía de WhatsApp, Aviso a Gerard 19:00">
+            <p class="form-hint">Se guarda en el crontab como comentario <code># título: …</code> encima de la tarea.</p>
+          </div>
           <div class="form-row">
             <label for="job-frequency">Frecuencia</label>
             <select id="job-frequency" name="frequency">
@@ -311,9 +334,23 @@
     </div>
   </div>
 
+  <script src="/js/cronSchedule.js"></script>
   <script>
     (function () {
       var jobs = <%- JSON.stringify(typeof jobs !== 'undefined' ? jobs : []) %>;
+      var crontabHash = <%- JSON.stringify(typeof crontabHash !== 'undefined' ? crontabHash : '') %>;
+      var dirty = false;
+      function markDirty() {
+        dirty = true;
+        var st = document.getElementById('save-status');
+        if (st) { st.textContent = 'Cambios sin guardar: pulsa Guardar'; st.className = 'status'; }
+      }
+      window.addEventListener('beforeunload', function (e) {
+        if (dirty) { e.preventDefault(); e.returnValue = ''; }
+      });
+      function normalizeText(s) {
+        return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      }
       var FREQUENCIAS = <%- JSON.stringify(typeof FRECUENCIAS !== 'undefined' ? FRECUENCIAS : []) %>;
 
       // Navegación por vistas: al hacer clic en el menú se muestra solo esa sección (sin anclas de una sola página)
@@ -441,6 +478,7 @@
           } catch (e) { nextRunStr = ''; }
         }
         var html = '<div class="job-info">';
+        if (job.title) html += '<div class="job-title">' + escapeHtml(job.title) + '</div>';
         if (nextRunStr) html += '<div class="job-next-run">' + escapeHtml(nextRunStr) + '</div>';
         html += '<div class="job-schedule-human">' + escapeHtml(job.humanSchedule || job.schedule) + '</div>';
         if (job.humanCommand) {
@@ -471,6 +509,7 @@
           if (noJobs) noJobs.style.display = 'block';
           if (noJobsTareas) noJobsTareas.style.display = 'block';
           if (noJobsInicio) noJobsInicio.style.display = 'block';
+          applyTareasFilter();
           return;
         }
         if (noJobs) noJobs.style.display = 'none';
@@ -488,11 +527,13 @@
             var li = document.createElement('li');
             li.className = 'job-card';
             li.innerHTML = makeJobCard(job, idx);
+            li.setAttribute('data-search', normalizeText([job.title, job.command, job.humanSchedule, job.schedule, job.humanCommand].join(' ')));
             container.appendChild(li);
           });
         }
         appendCardTo(list);
         if (listTareas) appendCardTo(listTareas);
+        applyTareasFilter();
         if (inicioList) {
           var n = Math.min(5, sorted.length);
           for (var i = 0; i < n; i++) {
@@ -514,7 +555,7 @@
           container.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
             btn.addEventListener('click', function () {
               var i = parseInt(btn.getAttribute('data-index'), 10);
-              jobs.splice(i, 1);
+              jobs.splice(i, 1); markDirty();
               renderScheduleList();
               if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
             });
@@ -600,7 +641,9 @@
           document.getElementById('job-custom-expression').value = opt.customExpression || '';
           document.getElementById('job-command').value = j.command || '';
           document.getElementById('job-use-xvfb').checked = !!j.useXvfb;
+          document.getElementById('job-title').value = j.title || '';
         } else {
+          document.getElementById('job-title').value = '';
           document.getElementById('job-frequency').value = 'daily';
           document.getElementById('job-minute-interval').value = 5;
           document.getElementById('job-hour-interval').value = 1;
@@ -654,15 +697,23 @@
           at_reboot: 'Cada vez que se inicia el sistema',
           custom: schedule
         };
-        var humanSchedule = humanLabels[opts.frequency] || schedule;
+        var humanSchedule = (window.CronSchedule && window.CronSchedule.cronToHuman(schedule)) || humanLabels[opts.frequency] || schedule;
         var index = parseInt(document.getElementById('job-edit-index').value, 10);
         var useXvfb = document.getElementById('job-use-xvfb').checked;
-        var newJob = { schedule: schedule, command: command, humanSchedule: humanSchedule, formOptions: opts, useXvfb: !!useXvfb };
+        var title = document.getElementById('job-title').value.replace(/\s+/g, ' ').trim();
+        var newJob = { title: title, schedule: schedule, command: command, humanSchedule: humanSchedule, formOptions: opts, useXvfb: !!useXvfb };
         if (index >= 0 && index < jobs.length) {
+          var prev = jobs[index];
+          newJob.origLine = prev.origLine;
+          newJob.line = prev.line;
+          newJob.humanCommand = prev.command === command ? prev.humanCommand : '';
+          if (prev.schedule === schedule) { newJob.nextRun = prev.nextRun; newJob.nextRunMs = prev.nextRunMs; }
+          if (prev.schedule === schedule && prev.command === command && !!prev.useXvfb === !!useXvfb) newJob.logStatus = prev.logStatus;
           jobs[index] = newJob;
         } else {
           jobs.push(newJob);
         }
+        markDirty();
         renderScheduleList();
         closeForm();
       });
@@ -1208,30 +1259,127 @@
 
       loadPM2List();
 
-      document.getElementById('btn-save-crontab').addEventListener('click', function () {
-        var status = document.getElementById('save-status');
-        status.textContent = 'Guardando...';
-        status.className = 'status';
-        fetch('/api/jobs', {
+      function postJson(url, body) {
+        return fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jobs: jobs.map(function (j) { return { schedule: j.schedule, command: j.command, useXvfb: !!j.useXvfb }; }) })
-        })
-          .then(function (r) { return r.json(); })
-          .then(function (data) {
-            if (data.ok) {
-              status.textContent = 'Crontab guardado correctamente';
-              status.className = 'status ok';
-              setTimeout(function () { location.reload(); }, 1200);
-            } else {
-              status.textContent = 'Error: ' + (data.error || 'desconocido');
-              status.className = 'status err';
-            }
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(body || {})
+        }).then(function (r) {
+          return r.json().catch(function () { return { ok: false, error: 'Respuesta no válida (' + r.status + ')' }; });
+        });
+      }
+
+      // Guardar: 1) copia del crontab actual, 2) escribir cambios. Si la copia falla, no se guarda.
+      document.getElementById('btn-save-crontab').addEventListener('click', function () {
+        var btn = this;
+        var status = document.getElementById('save-status');
+        function setStatus(text, cls) { status.textContent = text; status.className = 'status' + (cls ? ' ' + cls : ''); }
+        btn.disabled = true;
+        setStatus('Preparando copia…');
+        postJson('/api/backups')
+          .then(function (b) {
+            if (!b.ok) throw new Error('No se pudo hacer la copia, no se ha guardado nada. ' + (b.error || ''));
+            setStatus('Copia hecha (' + b.name + '). Guardando…', 'ok');
+            return postJson('/api/jobs', {
+              baseHash: crontabHash,
+              jobs: jobs.map(function (j) {
+                return { origLine: j.origLine || '', title: j.title || '', schedule: j.schedule, command: j.command, useXvfb: !!j.useXvfb };
+              })
+            });
           })
-          .catch(function () {
-            status.textContent = 'Error de red';
-            status.className = 'status err';
+          .then(function (data) {
+            if (!data.ok) throw new Error(data.error || 'desconocido');
+            dirty = false;
+            if (data.hash) crontabHash = data.hash;
+            setStatus('Copia hecha (' + data.backup + ') · Guardado' + (data.unchanged ? ' (sin cambios)' : ''), 'ok');
+            setTimeout(function () { location.reload(); }, 1500);
+          })
+          .catch(function (err) {
+            btn.disabled = false;
+            setStatus('Error: ' + (err && err.message ? err.message : 'de red'), 'err');
           });
+      });
+
+      // Copias de seguridad: lista, ver y restaurar
+      var backupsPanel = document.getElementById('backups-panel');
+      var backupsList = document.getElementById('backups-list');
+      var backupsStatus = document.getElementById('backups-status');
+      var backupsPreview = document.getElementById('backups-preview');
+      function formatBackupDate(name, ms) {
+        var m = /^crontab_(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(name);
+        if (m) return m[3] + '/' + m[2] + '/' + m[1] + ' ' + m[4] + ':' + m[5] + ':' + m[6];
+        return ms ? new Date(ms).toLocaleString('es-ES') : name;
+      }
+      function loadBackups() {
+        backupsStatus.textContent = 'Cargando…';
+        backupsStatus.className = 'status';
+        backupsPreview.style.display = 'none';
+        fetch('/api/backups', { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (data) {
+          backupsStatus.textContent = '';
+          if (!data.ok) { backupsStatus.textContent = data.error || 'Error'; backupsStatus.className = 'status err'; return; }
+          document.getElementById('backups-dir').textContent = data.dir;
+          if (!data.backups.length) { backupsList.innerHTML = '<li class="no-jobs">Todavía no hay copias. Se creará una al pulsar Guardar.</li>'; return; }
+          backupsList.innerHTML = data.backups.map(function (b) {
+            return '<li class="backup-item"><span class="backup-date">' + escapeHtml(formatBackupDate(b.name, b.mtimeMs)) + '</span>' +
+              ' <span class="backup-meta">' + b.jobs + ' tarea' + (b.jobs === 1 ? '' : 's') + ' · ' + escapeHtml(b.name) + '</span>' +
+              ' <span class="backup-actions"><button type="button" class="btn-small btn-edit backup-view" data-name="' + escapeHtml(b.name) + '">Ver</button>' +
+              ' <button type="button" class="btn-small btn-delete backup-restore" data-name="' + escapeHtml(b.name) + '">Restaurar</button></span></li>';
+          }).join('');
+        }).catch(function () { backupsStatus.textContent = 'Error de red'; backupsStatus.className = 'status err'; });
+      }
+      document.getElementById('btn-backups').addEventListener('click', function () {
+        backupsPanel.style.display = 'block';
+        loadBackups();
+        backupsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      document.getElementById('backups-close').addEventListener('click', function () { backupsPanel.style.display = 'none'; });
+      backupsList.addEventListener('click', function (e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        var name = btn.getAttribute('data-name');
+        if (btn.classList.contains('backup-view')) {
+          fetch('/api/backups/' + encodeURIComponent(name), { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (data) {
+            backupsPreview.textContent = data.ok ? data.content : (data.error || 'Error');
+            backupsPreview.style.display = 'block';
+          });
+        } else if (btn.classList.contains('backup-restore')) {
+          var msg = '¿Restaurar la copia del ' + formatBackupDate(name) + '?\n\nSe sustituirá el crontab actual por esa copia (antes se guardará una copia del actual).';
+          if (dirty) msg += '\n\nOJO: tienes cambios sin guardar en la lista y se perderán.';
+          if (!confirm(msg)) return;
+          backupsStatus.textContent = 'Preparando copia del crontab actual…';
+          backupsStatus.className = 'status';
+          postJson('/api/backups/restore', { name: name }).then(function (data) {
+            if (!data.ok) { backupsStatus.textContent = 'Error: ' + (data.error || 'desconocido'); backupsStatus.className = 'status err'; return; }
+            dirty = false;
+            backupsStatus.textContent = 'Copia hecha (' + data.backup + ') · Restaurado ' + data.restored;
+            backupsStatus.className = 'status ok';
+            setTimeout(function () { location.reload(); }, 1500);
+          }).catch(function () { backupsStatus.textContent = 'Error de red'; backupsStatus.className = 'status err'; });
+        }
+      });
+
+      // Filtro en vivo de la pestaña Tareas (título, comando, frecuencia)
+      var tareasSearch = document.getElementById('tareas-search');
+      function applyTareasFilter() {
+        var listEl = document.getElementById('tareas-list');
+        var countEl = document.getElementById('tareas-search-count');
+        var noMatch = document.getElementById('no-jobs-tareas-filter');
+        if (!listEl || !tareasSearch) return;
+        var terms = normalizeText(tareasSearch.value).split(/\s+/).filter(Boolean);
+        var items = listEl.querySelectorAll('li.job-card');
+        var shown = 0;
+        items.forEach(function (li) {
+          var hay = li.getAttribute('data-search') || '';
+          var ok = terms.every(function (t) { return hay.indexOf(t) >= 0; });
+          li.style.display = ok ? '' : 'none';
+          if (ok) shown++;
+        });
+        countEl.textContent = terms.length ? (shown + ' de ' + items.length + ' tareas') : '';
+        noMatch.style.display = (terms.length && items.length && !shown) ? 'block' : 'none';
+      }
+      tareasSearch.addEventListener('input', applyTareasFilter);
+      tareasSearch.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { tareasSearch.value = ''; applyTareasFilter(); }
       });
 
       document.getElementById('job-form-panel').style.display = 'none';
@@ -1270,7 +1418,7 @@
         searchResults.querySelectorAll('[data-action="delete"]').forEach(function (btn) {
           btn.addEventListener('click', function () {
             var i = parseInt(btn.getAttribute('data-index'), 10);
-            jobs.splice(i, 1);
+            jobs.splice(i, 1); markDirty();
             renderScheduleList();
             renderSearchResultsFromData(lastSearchResults.filter(function (r) { return ((r.line != null && r.line !== '' && findJobIndexByLine(r.line) >= 0) || findJobIndex(r.schedule, r.command, r.useXvfb) >= 0); }));
           });
@@ -1439,7 +1587,7 @@
                   e.stopPropagation();
                   var i = parseInt(btn.getAttribute('data-job-index'), 10);
                   if (i >= 0) {
-                    jobs.splice(i, 1);
+                    jobs.splice(i, 1); markDirty();
                     renderScheduleList();
                     loadDayView();
                     if (typeof renderSearchResultsFromData === 'function' && document.getElementById('search-input').value.trim()) renderSearchResultsFromData(lastSearchResults);
@@ -1503,8 +1651,10 @@
       loadDayView();
 
       refreshJobs = function () {
-        fetch('/api/jobs').then(function (r) { return r.json(); }).then(function (data) {
-          if (!data.ok || !data.jobs) return;
+        if (dirty) return; // no pisar cambios sin guardar
+        fetch('/api/jobs', { headers: { 'Accept': 'application/json' } }).then(function (r) { return r.json(); }).then(function (data) {
+          if (!data.ok || !data.jobs || dirty) return;
+          if (data.crontabHash) crontabHash = data.crontabHash;
           jobs.splice(0, jobs.length);
           data.jobs.forEach(function (j) { jobs.push(j); });
           renderScheduleList();
