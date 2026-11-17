@@ -1,4 +1,3 @@
-const crypto = require('crypto');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const express = require('express');
@@ -9,7 +8,9 @@ const rateLimit = require('express-rate-limit');
 const helmet = require('helmet');
 require('dotenv').config();
 const config = require('./config');
-const { readCrontab, writeCrontab, parseCrontabLines } = require('./lib/crontab');
+const { readCrontab, parseCrontabLines, crontabHash } = require('./lib/crontab');
+const { getRawCommandForLog, getLogPath: getLogPathIn, describeCommand, saveJobs, restoreContent } = require('./lib/saveCrontab');
+const backups = require('./lib/backups');
 const { buildSearchIndex, search } = require('./lib/search');
 const { cronToHuman, cronToFormOptions, FRECUENCIAS, DIAS_SEMANA } = require('./lib/cronSchedule');
 const { getNextRun, getRunsForDay } = require('./lib/nextRun');
@@ -18,7 +19,7 @@ const { getSettings, setReposPath, getLogsPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
-const { wrapXvfb, parseXvfbCommand } = require('./lib/xvfb');
+const { wrapXvfb } = require('./lib/xvfb');
 const { findUser, hasAccess, requireAuth } = require('./lib/auth');
 
 const pkg = require('./package.json');
@@ -72,6 +73,11 @@ app.use(express.json({ limit: '2mb' }));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
+// lib/cronSchedule.js también se usa en el navegador (cronToHuman al editar una tarea)
+const cronScheduleSource = fs.readFileSync(path.join(__dirname, 'lib', 'cronSchedule.js'), 'utf8');
+app.get('/js/cronSchedule.js', (req, res) => {
+  res.type('application/javascript').send('(function () { var module;\n' + cronScheduleSource + '\n})();\n');
+});
 
 // Login routes
 app.get('/login', (req, res) => {
@@ -103,22 +109,24 @@ app.post('/logout', (req, res) => {
 
 // Normaliza tarea del crontab a job con comando "raw" y flag useXvfb
 function taskToJob(t) {
-  const effectiveCommand = getRawCommandForLog(t.command);
-  const { rawCommand, useXvfb } = parseXvfbCommand(effectiveCommand);
-  const logPath = getLogPath(t.schedule, effectiveCommand);
+  const { rawCommand, useXvfb, effective } = describeCommand(t.command);
+  const logPath = getLogPath(t.schedule, t.command);
   const { nextRun, nextRunMs } = getNextRun(t.schedule);
   return {
+    title: t.title || '',
     schedule: t.schedule,
     command: rawCommand,
     useXvfb: !!useXvfb,
     line: t.line,
+    origLine: t.line,
     humanSchedule: cronToHuman(t.schedule),
     humanCommand: commandToDescription(rawCommand),
     formOptions: cronToFormOptions(t.schedule),
     nextRun: nextRun || null,
     nextRunMs: nextRunMs != null ? nextRunMs : null,
     logStatus: getLogStatus(logPath),
-    logPath
+    logPath,
+    effectiveCommand: effective
   };
 }
 
@@ -129,15 +137,13 @@ app.use(requireAuth);
 app.get('/', (req, res) => {
   const crontabResult = readCrontab();
   const tasks = crontabResult.ok ? parseCrontabLines(crontabResult.content) : [];
-  const jobs = tasks.map(t => {
-    const j = taskToJob(t);
-    return { ...j, line: t.line };
-  });
+  const jobs = tasks.map(taskToJob);
   const settings = getSettings();
   res.render('dashboard', {
     title: 'EasyCronTab',
     crontabError: crontabResult.ok ? null : crontabResult.error,
     jobs,
+    crontabHash: crontabResult.ok ? crontabHash(crontabResult.content) : '',
     FRECUENCIAS,
     DIAS_SEMANA,
     reposPath: settings.reposPath || '',
@@ -154,11 +160,8 @@ app.get('/api/jobs', (req, res) => {
     return res.status(500).json({ ok: false, error: result.error });
   }
   const tasks = parseCrontabLines(result.content);
-  const jobs = tasks.map(t => {
-    const j = taskToJob(t);
-    return { schedule: j.schedule, command: j.command, useXvfb: j.useXvfb, line: t.line, humanSchedule: j.humanSchedule, humanCommand: j.humanCommand, formOptions: j.formOptions, nextRun: j.nextRun, nextRunMs: j.nextRunMs, logStatus: j.logStatus, logPath: j.logPath };
-  });
-  res.json({ ok: true, jobs });
+  const jobs = tasks.map(taskToJob);
+  res.json({ ok: true, jobs, crontabHash: crontabHash(result.content) });
 });
 
 // API jobs: contenido del log de una tarea (body: schedule, command, useXvfb?)
@@ -269,19 +272,8 @@ app.get('/api/jobs/day', (req, res) => {
   res.json({ ok: true, date: dateStr, slots });
 });
 
-// Comando sin redirección a log (para calcular el mismo hash al guardar y al leer)
-function getRawCommandForLog(command) {
-  const cmd = (command || '').trim();
-  return cmd.replace(/\s*>>\s*[^\s]+\s+2>&1\s*$/, '').trim() || cmd;
-}
-
 function getLogPath(schedule, command) {
-  const cmd = (command || '').trim();
-  const explicit = cmd.match(/\s*>>\s*(\S+)\s+2>&1\s*$/);
-  if (explicit) return explicit[1];
-  const rawCmd = getRawCommandForLog(cmd);
-  const hash = crypto.createHash('md5').update((schedule || '') + '\n' + rawCmd).digest('hex').slice(0, 12);
-  return path.join(getLogsPath(), hash + '.log');
+  return getLogPathIn(schedule, command, getLogsPath());
 }
 
 function getLogStatus(logPath) {
@@ -301,42 +293,50 @@ function getLogStatus(logPath) {
   }
 }
 
-// Añade redirección a log (>> ... 2>&1) si el comando no la tiene
-function ensureLogRedirection(command, schedule, logDir) {
-  const cmd = (command || '').trim();
-  if (!cmd) return cmd;
-  if (/2>&1\s*$/.test(cmd)) return cmd;
-  const rawCmd = getRawCommandForLog(cmd);
-  const hash = crypto.createHash('md5').update((schedule || '') + '\n' + rawCmd).digest('hex').slice(0, 12);
-  const logFile = path.join(logDir, hash + '.log');
-  return cmd + ' >> ' + logFile + ' 2>&1';
-}
-
-// API jobs: guardar (reemplaza todo el crontab con la lista enviada)
+// API jobs: guardar. Hace copia antes, conserva comentarios/entorno y no toca las tareas sin cambios.
+// body: { jobs: [{ origLine?, title?, schedule, command, useXvfb? }], baseHash }
 app.post('/api/jobs', (req, res) => {
   const jobs = Array.isArray(req.body.jobs) ? req.body.jobs : [];
-  const logDir = getLogsPath();
+  const logsDir = getLogsPath();
   try {
-    fs.mkdirSync(logDir, { recursive: true });
+    fs.mkdirSync(logsDir, { recursive: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'No se pudo crear la carpeta de logs: ' + (e.message || e.code) });
   }
-  const lines = jobs
-    .filter(j => j && (j.schedule || j.command))
-    .map(j => {
-      const schedule = (j.schedule || '').trim();
-      const rawCommand = (j.command || '').trim();
-      const effectiveCommand = j.useXvfb ? wrapXvfb(rawCommand) : rawCommand;
-      const command = ensureLogRedirection(effectiveCommand, schedule, logDir);
-      return schedule ? schedule + ' ' + command : command;
-    })
-    .filter(Boolean);
-  const content = lines.join('\n') + (lines.length ? '\n' : '');
-  const result = writeCrontab(content);
-  if (!result.ok) {
-    return res.status(500).json({ ok: false, error: result.error });
-  }
-  res.json({ ok: true });
+  const result = saveJobs({ jobs, baseHash: req.body.baseHash, logsDir });
+  if (!result.ok) return res.status(result.status || 500).json(result);
+  res.json(result);
+});
+
+// API copias: hacer copia del crontab actual (paso «Preparando copia…» de la interfaz)
+app.post('/api/backups', (req, res) => {
+  const current = readCrontab();
+  if (!current.ok) return res.status(500).json({ ok: false, error: 'No se pudo leer el crontab: ' + current.error });
+  const result = backups.createBackup(current.content);
+  if (!result.ok) return res.status(500).json(result);
+  res.json(result);
+});
+
+// API copias: listar
+app.get('/api/backups', (req, res) => {
+  res.json({ ok: true, dir: backups.getBackupsDir(), max: backups.MAX_BACKUPS, backups: backups.listBackups() });
+});
+
+// API copias: ver contenido de una copia
+app.get('/api/backups/:name', (req, res) => {
+  const result = backups.readBackup(req.params.name);
+  if (!result.ok) return res.status(404).json(result);
+  res.json(result);
+});
+
+// API copias: restaurar (antes hace copia del crontab actual)
+app.post('/api/backups/restore', (req, res) => {
+  const name = req.body && req.body.name;
+  const b = backups.readBackup(name);
+  if (!b.ok) return res.status(400).json(b);
+  const result = restoreContent(b.content);
+  if (!result.ok) return res.status(result.status || 500).json(result);
+  res.json({ ...result, restored: name });
 });
 
 // API configuración: carpeta de repositorios
