@@ -11,7 +11,7 @@ process.env.FAKE_CRONTAB_FILE = path.join(tmp, 'crontab.txt');
 process.env.EASYCRONTAB_BACKUPS_DIR = path.join(tmp, 'backups');
 
 const { parseCrontabLines, parseCrontabDocument, readCrontab, crontabHash } = require('../lib/crontab');
-const { buildCrontabContent, saveJobs, restoreContent, describeCommand } = require('../lib/saveCrontab');
+const { buildCrontabContent, saveJobs, restoreContent, describeCommand, findTask, getTaskLog, getRunNowCommand, getRedirectTarget } = require('../lib/saveCrontab');
 const backups = require('../lib/backups');
 const { cronToHuman, cronToFormOptions } = require('../lib/cronSchedule');
 
@@ -242,6 +242,39 @@ test('cronToFormOptions: rangos y listas se editan como expresión, sin cambiarl
   assert.equal(cronToFormOptions('0 19 * * *').frequency, 'daily');
   assert.equal(cronToFormOptions('*/5 * * * *').frequency, 'every_n_minutes');
   assert.equal(cronToFormOptions('0 9 * * 1').frequency, 'weekly');
+});
+
+test('log real: usa la redirección de la línea del crontab, no un hash', () => {
+  const content = [
+    '# título: Vigía',
+    '*/5 * * * * /home/u/vigia.sh >> /home/u/logs/vigia.log 2>&1',
+    '0 3 * * * /home/u/backup.sh > /dev/null 2>&1',
+    '31 7 * * 1-5 cd /srv/app && npm run sync',
+    '0 4 * * * /home/u/limpia.sh >/tmp/limpia.log',
+    ''
+  ].join('\n');
+  const tasks = parseCrontabLines(content);
+  const logs = '/var/logs-ect';
+
+  // Por línea exacta y por horario + comando visible en la interfaz
+  const vigia = findTask(tasks, { origLine: tasks[0].line });
+  assert.equal(vigia, tasks[0]);
+  assert.equal(findTask(tasks, { schedule: '*/5 * * * *', command: '/home/u/vigia.sh' }), tasks[0]);
+  assert.equal(findTask(tasks, { schedule: '0 5 * * *', command: '/home/u/vigia.sh' }), null);
+
+  assert.deepEqual(getTaskLog(vigia, logs), { path: '/home/u/logs/vigia.log', kind: 'explicit' });
+  assert.equal(getTaskLog(tasks[1], logs).kind, 'elsewhere');
+  assert.equal(getTaskLog(tasks[1], logs).path, null);
+  const computed = getTaskLog(tasks[2], logs);
+  assert.equal(computed.kind, 'computed');
+  assert.ok(computed.path.startsWith(logs + '/'));
+  assert.equal(getTaskLog(tasks[3], logs).path, '/tmp/limpia.log');
+  assert.equal(getRedirectTarget('foo 2>&1'), null);
+
+  // Ejecuta: la línea tal cual; si no redirige, al mismo log que muestra «Log»
+  assert.equal(getRunNowCommand(vigia, logs), '/home/u/vigia.sh >> /home/u/logs/vigia.log 2>&1');
+  assert.equal(getRunNowCommand(tasks[1], logs), '/home/u/backup.sh > /dev/null 2>&1');
+  assert.equal(getRunNowCommand(tasks[2], logs), 'cd /srv/app && npm run sync >> ' + computed.path + ' 2>&1');
 });
 
 test.after(() => fs.rmSync(tmp, { recursive: true, force: true }));

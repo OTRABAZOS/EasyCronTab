@@ -9,7 +9,7 @@ const helmet = require('helmet');
 require('dotenv').config();
 const config = require('./config');
 const { readCrontab, parseCrontabLines, crontabHash } = require('./lib/crontab');
-const { getRawCommandForLog, getLogPath: getLogPathIn, describeCommand, saveJobs, restoreContent } = require('./lib/saveCrontab');
+const { getLogPath: getLogPathIn, describeCommand, findTask, getTaskLog, getRunNowCommand, saveJobs, restoreContent } = require('./lib/saveCrontab');
 const backups = require('./lib/backups');
 const { buildSearchIndex, search } = require('./lib/search');
 const { cronToHuman, cronToFormOptions, FRECUENCIAS, DIAS_SEMANA } = require('./lib/cronSchedule');
@@ -19,7 +19,6 @@ const { getSettings, setReposPath, getLogsPath } = require('./lib/settings');
 const { listRepos, buildCronCommand } = require('./lib/repos');
 const { listDirectory, getBrowseRoot } = require('./lib/browse');
 const pm2 = require('./lib/pm2');
-const { wrapXvfb } = require('./lib/xvfb');
 const { findUser, hasAccess, requireAuth } = require('./lib/auth');
 
 const pkg = require('./package.json');
@@ -110,7 +109,8 @@ app.post('/logout', (req, res) => {
 // Normaliza tarea del crontab a job con comando "raw" y flag useXvfb
 function taskToJob(t) {
   const { rawCommand, useXvfb, effective } = describeCommand(t.command);
-  const logPath = getLogPath(t.schedule, t.command);
+  const log = getTaskLog(t, getLogsPath());
+  const logPath = log.path;
   const { nextRun, nextRunMs } = getNextRun(t.schedule);
   return {
     title: t.title || '',
@@ -124,8 +124,9 @@ function taskToJob(t) {
     formOptions: cronToFormOptions(t.schedule),
     nextRun: nextRun || null,
     nextRunMs: nextRunMs != null ? nextRunMs : null,
-    logStatus: getLogStatus(logPath),
+    logStatus: logPath ? getLogStatus(logPath) : 'unknown',
     logPath,
+    logKind: log.kind,
     effectiveCommand: effective
   };
 }
@@ -164,14 +165,22 @@ app.get('/api/jobs', (req, res) => {
   res.json({ ok: true, jobs, crontabHash: crontabHash(result.content) });
 });
 
-// API jobs: contenido del log de una tarea (body: schedule, command, useXvfb?)
+// API jobs: contenido del log de una tarea (body: origLine?, schedule, command, useXvfb?).
+// Usa el fichero al que redirige la línea real del crontab; si no redirige, el log calculado.
 app.post('/api/jobs/log', (req, res) => {
-  const { schedule, command, useXvfb } = req.body || {};
-  if (!schedule || !command) {
+  const body = req.body || {};
+  if (!body.origLine && (!body.schedule || !body.command)) {
     return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
   }
-  const effectiveCommand = useXvfb ? wrapXvfb(command) : command;
-  const logPath = getLogPath(schedule, effectiveCommand);
+  const result = readCrontab();
+  if (!result.ok) return res.status(500).json({ ok: false, error: result.error });
+  const task = findTask(parseCrontabLines(result.content), body);
+  if (!task) return res.status(404).json({ ok: false, error: 'La tarea no está en el crontab actual. Recarga la página.' });
+  const log = getTaskLog(task, getLogsPath());
+  if (!log.path) {
+    return res.json({ ok: true, content: '(Esta tarea no guarda su salida en un fichero de log: la redirige a otro sitio, p. ej. /dev/null.)', path: null });
+  }
+  const logPath = log.path;
   try {
     if (!fs.existsSync(logPath)) {
       return res.json({ ok: true, content: '(El archivo de log aún no existe o la tarea no se ha ejecutado.)', path: logPath });
@@ -192,26 +201,26 @@ app.post('/api/jobs/log', (req, res) => {
   }
 });
 
-// API jobs: forzar ejecución ahora (body: schedule, command, useXvfb?). Ejecuta en segundo plano y escribe en el mismo log.
+// API jobs: forzar ejecución ahora (body: origLine?, schedule, command, useXvfb?).
+// Ejecuta en segundo plano el comando de la línea real del crontab, con su misma redirección.
 app.post('/api/jobs/run-now', (req, res) => {
-  const { schedule, command, useXvfb } = req.body || {};
-  if (!schedule || !command) {
+  const body = req.body || {};
+  if (!body.origLine && (!body.schedule || !body.command)) {
     return res.status(400).json({ ok: false, error: 'Faltan schedule o command' });
   }
-  const effectiveCommand = useXvfb ? wrapXvfb(command) : command;
   const result = readCrontab();
   if (!result.ok) {
     return res.status(500).json({ ok: false, error: result.error });
   }
-  const tasks = parseCrontabLines(result.content);
-  const exists = tasks.some(t => (t.schedule || '').trim() === (schedule || '').trim() && getRawCommandForLog(t.command) === effectiveCommand);
-  if (!exists) {
+  const task = findTask(parseCrontabLines(result.content), body);
+  if (!task) {
     return res.status(400).json({ ok: false, error: 'La tarea no está en el crontab actual' });
   }
-  const logDir = getLogsPath();
-  const fullCommand = effectiveCommand + ' >> ' + getLogPath(schedule, effectiveCommand) + ' 2>&1';
+  const logsDir = getLogsPath();
+  const log = getTaskLog(task, logsDir);
+  const fullCommand = getRunNowCommand(task, logsDir);
   try {
-    fs.mkdirSync(logDir, { recursive: true });
+    if (log.path) fs.mkdirSync(path.dirname(log.path), { recursive: true });
   } catch (e) {
     return res.status(500).json({ ok: false, error: 'No se pudo crear la carpeta de logs: ' + (e.message || String(e)) });
   }
