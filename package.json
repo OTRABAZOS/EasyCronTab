@@ -11,7 +11,8 @@
     "build:deb": "electron-builder --linux deb",
     "build:appimage": "electron-builder --linux AppImage",
     "prebuild": "node scripts/build-linux-icons.js",
-    "check:scripts": "node scripts/check-script-permissions.js"
+    "check:scripts": "node scripts/check-script-permissions.js",
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "cron-parser": "^5.5.0",
